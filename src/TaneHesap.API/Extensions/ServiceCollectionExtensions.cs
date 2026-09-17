@@ -5,6 +5,8 @@ using TaneHesap.Application.Employees;
 using TaneHesap.Application.ExpenseTypes;
 using TaneHesap.Application.Expenses;
 using TaneHesap.Application.Ingredients;
+using TaneHesap.Application.Stock;
+using TaneHesap.Application.Suppliers;
 
 namespace TaneHesap.API.Extensions;
 
@@ -24,6 +26,8 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IEmployeeService, EmployeeService>();
         services.AddScoped<IIngredientService, IngredientService>();
         services.AddScoped<IDishService, DishService>();
+        services.AddScoped<IStockMovementService, StockMovementService>();
+        services.AddScoped<ISupplierService, SupplierService>();
 
         return services;
     }

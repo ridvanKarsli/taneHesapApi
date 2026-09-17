@@ -71,9 +71,15 @@ aracıyla ilk kullanıcıyı oluşturmanız gerekir — bu, projenin bir sonraki
   `GET /api/ingredients/below-threshold` düşük stoktaki malzemeleri döner.
 - Dishes: ADMIN ürün (Dish), tabak boyu (DishSize) ve reçete (DishRecipeItem) tanımlar; tabak
   maliyeti (Cost) ve kâr marjı (ProfitMargin) reçete × güncel malzeme fiyatına göre otomatik hesaplanır.
+- Stock (StockMovements): ADMIN manuel stok hareketi (sayım düzeltmesi, fire) girer, ADMIN+EMPLOYEE
+  görüntüler; her hareket ilgili Ingredient.CurrentStockQuantity alanını otomatik günceller.
+- Suppliers: ADMIN tedarikçi kartı, alış (SupplierPurchase) ve (kısmi olabilen) ödeme kaydeder.
+  Alış kaydedilince otomatik olarak (1) malzeme stoğuna Purchase hareketi eklenir, (2) malzemenin
+  güncel birim fiyatı bu alışla güncellenir; ödemeler toplamı tutara ulaşınca alış IsFullyPaid=true
+  olur. `GET /api/suppliers/debt-summary` işletme genelinde ödenmemiş toplam borcu döner.
 
-Diğer modüller (tabak/reçete/maliyet, stok, gün sonu Excel içe aktarımı ve fire analizi, düzenli
-giderler, tedarikçiler, raporlama, audit log middleware'i, SignalR bildirimleri) için Domain
+Diğer modüller (gün sonu Excel içe aktarımı ve fire analizi, düzenli giderler, paket servis
+platform komisyonları, raporlama, audit log middleware'i, SignalR bildirimleri) için Domain
 katmanındaki entity'ler ve veritabanı şeması hazır; Application/Infrastructure/API katmanlarında
 aynı pattern (Repository + Service + Controller) izlenerek eklenmesi gerekir — bkz. `proje-raporu.md`
 bölüm 3 ve 6 (fazlandırma).
