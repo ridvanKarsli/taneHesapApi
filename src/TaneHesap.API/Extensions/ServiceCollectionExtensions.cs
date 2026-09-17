@@ -1,5 +1,7 @@
 using TaneHesap.Application.Auth;
 using TaneHesap.Application.Businesses;
+using TaneHesap.Application.DailyClosing;
+using TaneHesap.Application.DailySales;
 using TaneHesap.Application.Dishes;
 using TaneHesap.Application.Employees;
 using TaneHesap.Application.ExpenseTypes;
@@ -34,6 +36,8 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IRecurringExpenseService, RecurringExpenseService>();
         services.AddScoped<INotificationService, NotificationService>();
         services.AddScoped<IPlatformService, PlatformService>();
+        services.AddScoped<IDailySalesService, DailySalesService>();
+        services.AddScoped<IDailyClosingService, DailyClosingService>();
 
         return services;
     }
