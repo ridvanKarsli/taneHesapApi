@@ -1,4 +1,5 @@
 using TaneHesap.Application.Common.Interfaces;
+using TaneHesap.Application.Platforms;
 using TaneHesap.Domain.Entities;
 using TaneHesap.Domain.Enums;
 
@@ -7,10 +8,12 @@ namespace TaneHesap.Application.DailySales;
 public class DailySalesService : IDailySalesService
 {
     private readonly IUnitOfWork _unitOfWork;
+    private readonly IPlatformCommissionExpensePoster _commissionExpensePoster;
 
-    public DailySalesService(IUnitOfWork unitOfWork)
+    public DailySalesService(IUnitOfWork unitOfWork, IPlatformCommissionExpensePoster commissionExpensePoster)
     {
         _unitOfWork = unitOfWork;
+        _commissionExpensePoster = commissionExpensePoster;
     }
 
     public async Task<ImportDailySalesResult> ImportAsync(Guid businessId, ImportDailySalesRequest request, Guid importedByUserId, CancellationToken ct = default)
@@ -88,6 +91,17 @@ public class DailySalesService : IDailySalesService
         }
 
         await _unitOfWork.SaveChangesAsync(ct);
+
+        // Paket servis (Platform) kanalından gelen satırların komisyonunu otomatik olarak Expense
+        // kaydına dönüştür (bkz. Proje Raporu bölüm 3.4). Ayrı bir servise devredilir; bu metot
+        // satış içe aktarımından, IPlatformCommissionExpensePoster komisyon/gider dönüşümünden
+        // sorumludur (Single Responsibility).
+        var affectedDates = validEntries
+            .Where(e => e.Channel == SalesChannel.Platform)
+            .Select(e => e.SaleDate)
+            .Distinct();
+
+        await _commissionExpensePoster.PostCommissionExpensesAsync(businessId, affectedDates, importedByUserId, ct);
 
         return new ImportDailySalesResult(importLog.Id, request.Rows.Count, validEntries.Count, errors.Count, errors);
     }

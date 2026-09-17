@@ -115,9 +115,25 @@ SUPER_ADMIN de otomatik oluşturulabilir — ama güvenlik gereği kimlik bilgil
   `AuditSaveChangesInterceptor` (EF Core `SaveChangesInterceptor`) tarafından her `SaveChanges`
   çağrısında değişen entity'lerden otomatik üretilir (bkz. "Audit log nasıl çalışıyor").
 
-Kapsam dışı bırakılan/ertelenen tek küçük nokta: paket servis komisyonunun gün sonu içe
-aktarımında otomatik bir `Expense` kaydına dönüştürülmesi — şu an Reports modülünde raporlama
-anında hesaplanıyor, ayrı bir gider kaydı olarak DB'ye yazılmıyor.
+Kapsam dışı bırakılan/ertelenen tek nokta: Excel şablonunun kesin kolon yapısı netleşene kadar
+gerçek `.xlsx` dosya yükleme uç noktası (yukarıda DailySales notuna bkz.) — bunun dışında planlanan
+tüm modüller tamamlandı (bkz. "Platform komisyonu → otomatik gider" bölümü, en son eklenen parça).
+
+## Platform komisyonu → otomatik gider (SOLID notu)
+
+`DailySalesService.ImportAsync`, gün sonu içe aktarımı tamamlandıktan sonra `Platform` kanallı
+satırların komisyonunu otomatik bir `Expense` kaydına dönüştürür. Bu iş `DailySalesService`'e
+gömülmek yerine ayrı bir soyutlamaya (`TaneHesap.Application/Platforms/IPlatformCommissionExpensePoster`)
+devredilir — satış içe aktarımı ile komisyon/gider dönüşümü birbirinden bağımsız iki sorumluluktur
+(Single Responsibility), `DailySalesService` şişmez.
+
+`PlatformCommissionExpensePoster`:
+- İlgili tarihlerdeki `Platform` kanallı satış satırlarını platform+tarih bazında gruplayıp brüt
+  tutarı toplar, `Platform.CommissionPercentage` ile komisyon tutarını hesaplar.
+- Her platform için otomatik bir `ExpenseType` (`"Platform Komisyonu - {platform adı}"`,
+  kategori `Other`) get-or-create eder — elle tür tanımlamaya gerek kalmaz.
+- Platform+tarih başına tek bir `Expense` kaydını **idempotent** şekilde oluşturur/günceller (aynı
+  günün verisi tekrar içe aktarılırsa yeni satır değil, mevcut tutar güncellenir).
 
 ## Audit log nasıl çalışıyor (SOLID notu)
 
@@ -146,6 +162,7 @@ veritabanında kalır ve `GET /api/notifications` ile her zaman okunabilir.
 ## Sonraki adımlar
 
 - ~~`dotnet restore` + `dotnet build` ile Infrastructure/API katmanlarını doğrulayın.~~ ✅ Tamamlandı.
+- ~~Platform komisyonunu gün sonu içe aktarımında otomatik `Expense` kaydına dönüştürün.~~ ✅ Tamamlandı.
 - İlk migration'ı oluşturup PostgreSQL'e uygulayın.
 - `InitialSuperAdmin:Username/Password` değerlerini tanımlayıp uygulamayı başlatarak ilk SUPER_ADMIN'i
   otomatik oluşturtun (bkz. "İlk SUPER_ADMIN kullanıcısını oluşturma").
