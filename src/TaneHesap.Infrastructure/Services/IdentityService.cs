@@ -140,6 +140,15 @@ public class IdentityService : IIdentityService
         return users.Select(ToInfo).ToList();
     }
 
+    public async Task<List<ApplicationUserInfo>> GetAdminsByBusinessAsync(Guid businessId)
+    {
+        var users = await _userManager.Users
+            .Where(u => u.BusinessId == businessId && u.Role == UserRole.Admin && u.IsActive)
+            .ToListAsync();
+
+        return users.Select(ToInfo).ToList();
+    }
+
     public async Task<string> GetOrCreateTotpSecretAsync(Guid userId)
     {
         var user = await _userManager.FindByIdAsync(userId.ToString())

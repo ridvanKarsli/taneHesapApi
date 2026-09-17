@@ -5,6 +5,8 @@ using TaneHesap.Application.Employees;
 using TaneHesap.Application.ExpenseTypes;
 using TaneHesap.Application.Expenses;
 using TaneHesap.Application.Ingredients;
+using TaneHesap.Application.Notifications;
+using TaneHesap.Application.Platforms;
 using TaneHesap.Application.RecurringExpenses;
 using TaneHesap.Application.Stock;
 using TaneHesap.Application.Suppliers;
@@ -30,6 +32,8 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IStockMovementService, StockMovementService>();
         services.AddScoped<ISupplierService, SupplierService>();
         services.AddScoped<IRecurringExpenseService, RecurringExpenseService>();
+        services.AddScoped<INotificationService, NotificationService>();
+        services.AddScoped<IPlatformService, PlatformService>();
 
         return services;
     }

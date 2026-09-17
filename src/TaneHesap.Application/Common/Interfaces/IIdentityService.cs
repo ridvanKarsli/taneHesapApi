@@ -43,6 +43,9 @@ public interface IIdentityService
 
     Task<List<ApplicationUserInfo>> GetEmployeesByBusinessAsync(Guid businessId);
 
+    /// <summary>Bir işletmenin ADMIN kullanıcılarını döner — in-app bildirimler bunlara gönderilir.</summary>
+    Task<List<ApplicationUserInfo>> GetAdminsByBusinessAsync(Guid businessId);
+
     /// <summary>SUPER_ADMIN/ADMIN için TOTP secret'ı döner; yoksa yeni bir tane oluşturup kaydeder.</summary>
     Task<string> GetOrCreateTotpSecretAsync(Guid userId);
 

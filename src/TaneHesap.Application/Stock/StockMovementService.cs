@@ -1,5 +1,6 @@
 using TaneHesap.Application.Common.Exceptions;
 using TaneHesap.Application.Common.Interfaces;
+using TaneHesap.Application.Notifications;
 using TaneHesap.Domain.Entities;
 
 namespace TaneHesap.Application.Stock;
@@ -7,10 +8,12 @@ namespace TaneHesap.Application.Stock;
 public class StockMovementService : IStockMovementService
 {
     private readonly IUnitOfWork _unitOfWork;
+    private readonly INotificationService _notificationService;
 
-    public StockMovementService(IUnitOfWork unitOfWork)
+    public StockMovementService(IUnitOfWork unitOfWork, INotificationService notificationService)
     {
         _unitOfWork = unitOfWork;
+        _notificationService = notificationService;
     }
 
     public async Task<List<StockMovementDto>> GetAllAsync(Guid businessId, Guid? ingredientId, CancellationToken ct = default)
@@ -55,6 +58,12 @@ public class StockMovementService : IStockMovementService
         ingredientRepo.Update(ingredient);
 
         await _unitOfWork.SaveChangesAsync(ct);
+
+        if (ingredient.IsActive && ingredient.CurrentStockQuantity <= ingredient.MinimumStockThreshold)
+        {
+            await _notificationService.NotifyLowStockAsync(
+                businessId, ingredient.Name, ingredient.CurrentStockQuantity, ingredient.MinimumStockThreshold, ct);
+        }
 
         return ToDto(movement, ingredient);
     }
