@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/TaneHesap.API/TaneHesap.API.csproj" />
+    <Project Path="src/TaneHesap.Application/TaneHesap.Application.csproj" />
+    <Project Path="src/TaneHesap.Domain/TaneHesap.Domain.csproj" />
+    <Project Path="src/TaneHesap.Infrastructure/TaneHesap.Infrastructure.csproj" />
+  </Folder>
+</Solution>

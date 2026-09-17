@@ -1,0 +1,2 @@
+Bu klasör `dotnet ef migrations add InitialCreate` çalıştırıldığında EF Core migration dosyalarını içerecek.
+Bu sandbox ortamında NuGet erişimi kısıtlı olduğu için migration burada üretilemedi; README.md'deki adımları izleyin.
