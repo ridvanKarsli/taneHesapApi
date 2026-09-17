@@ -15,7 +15,7 @@
     NuGet paketleri: bu sandbox ortamında organizasyon egress politikası NuGet.org'a erişimi
     engellediği için burada `dotnet restore` çalıştırılamadı. Versiyonlar .NET 10 / EF Core 10
     dönemine göre seçildi; localde `dotnet restore` çalıştırdığında NuGet en güncel uyumlu
-    sürümleri çözecektir (gerekirse `dotnet list package --outdated` ile güncelleyin).
+    sürümleri çözecektir (gerekirse "dotnet list package" ile güncel sürümleri kontrol edin).
   -->
   <ItemGroup>
     <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.0" />
