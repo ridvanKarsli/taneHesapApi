@@ -59,7 +59,7 @@ güvenlik gereği ilk SUPER_ADMIN kullanıcısı koda gömülmez. `IIdentityServ
 metodunu bir kerelik bir seed script/endpoint ile çağırarak veya `dotnet ef` / küçük bir konsol
 aracıyla ilk kullanıcıyı oluşturmanız gerekir — bu, projenin bir sonraki adımlarından biridir.
 
-## Uygulanan modüller (Faz 1 — vertical slice)
+## Uygulanan modüller (Faz 1-3 — vertical slice)
 
 - Auth: login (SUPER_ADMIN/ADMIN için TOTP zorunlu, EMPLOYEE için yok), refresh token (rotation),
   revoke, TOTP kurulumu.
@@ -80,18 +80,35 @@ aracıyla ilk kullanıcıyı oluşturmanız gerekir — bu, projenin bir sonraki
 - RecurringExpenses: ADMIN kira/elektrik gibi periyodik giderleri (haftalık/aylık/yıllık) tanımlar;
   sistem bugüne göre güncel dönemi ve ödenip ödenmediğini otomatik hesaplar, `mark-period-paid` ile
   bir dönem ödendi işaretlenir. `GET /api/recurring-expenses/due-for-reminder` dönem sonuna gelmiş
-  ve ödenmemiş giderleri döner (Notifications modülü bunu tüketecek).
+  ve ödenmemiş giderleri döner.
+- Notifications: ADMIN'lere in-app bildirim (şimdilik düşük stok tetikleyicisi bağlı — StockMovements
+  ve DailyClosing stok düşümü sonrası eşik altına inen malzemeler için otomatik bildirim üretir),
+  okundu işaretleme. `IIdentityService.GetAdminsByBusinessAsync` bildirim alıcılarını bulur.
+- Platforms: paket servis platformu (Yemeksepeti, Getir vb.) + komisyon yüzdesi CRUD.
+- DailySales: gün sonu satış satırlarını içe aktarır (`ExcelImportLog` ile), reçeteye göre o günün
+  beklenen gelirini ve malzeme tüketimini hesaplar. **Not:** Excel şablonunun kesin kolon yapısı
+  henüz netleşmediği için (bkz. `proje-raporu.md` bölüm 7/9) import şu an ayrıştırılmış satırları
+  (JSON) kabul ediyor; şablon netleşince API katmanına ClosedXML/EPPlus ile doğrudan `.xlsx` kabul
+  eden bir uç nokta eklenip aynı DTO'ya (`ImportDailySalesRequest`) bağlanması yeterli olacak.
+- DailyClosing: ADMIN'in gün sonu gerçekleşen gelir + malzeme bazında gerçek tüketim girişini alır;
+  stok düşümünü bu adımda kesinleştirir (`StockMovementType.SaleConsumption`, yeniden gönderimde
+  önceki düşümü geri alıp yeniden uygular) ve DailySales'in beklediği değerlerle karşılaştırıp
+  `DailyLossReport`'u (malzeme bazında ve tutar bazında fark) otomatik üretir/günceller.
+- Reports: `GET /api/reports/period?fromDate=...&toDate=...` — aynı tarih verilirse günlük, geniş
+  aralıkla haftalık/aylık rapor olur; toplam gelir/gider, nakit-kart kırılımı, dükkan içi/platform
+  kırılımı, gider kategorisi bazlı toplam ve platform bazlı brüt/komisyon/net gelir döner.
 
-Diğer modüller (gün sonu Excel içe aktarımı ve fire analizi, paket servis platform komisyonları,
-raporlama, audit log middleware'i, SignalR bildirimleri) için Domain katmanındaki entity'ler ve
-veritabanı şeması hazır; Application/Infrastructure/API katmanlarında aynı pattern (Repository +
-Service + Controller) izlenerek eklenmesi gerekir — bkz. `proje-raporu.md` bölüm 3 ve 6 (fazlandırma).
+Kapsam dışı bırakılan/ertelenen küçük noktalar: paket servis komisyonunun gün sonu içe aktarımında
+otomatik bir Expense kaydına dönüştürülmesi (şu an Reports modülünde raporlama anında hesaplanıyor,
+ayrı bir gider kaydı olarak DB'ye yazılmıyor); audit log middleware'i (AuditLog entity'si hazır,
+otomatik yazım katmanı eklenmedi); SignalR ile gerçek zamanlı bildirim itme (Notifications modülü
+şu an sadece REST üzerinden okunuyor, anlık push yok).
 
 ## Sonraki adımlar
 
 - `dotnet restore` + `dotnet build` ile Infrastructure/API katmanlarını doğrulayın.
 - İlk migration'ı oluşturup PostgreSQL'e uygulayın.
 - İlk SUPER_ADMIN kullanıcısını oluşturun.
-- Faz 2/3 modüllerini (stok, gün sonu, tedarikçi, raporlama, SignalR bildirimleri, Excel içe
-  aktarımı) aynı katmanlı pattern ile ekleyin.
+- Excel şablonu netleşince DailySales importuna gerçek `.xlsx` yükleme uç noktası ekleyin.
+- Audit log middleware'i ve SignalR ile anlık bildirim itmeyi ekleyin.
 - Frontend (React) projesini aynı repoya, `frontend/` klasörü altına ekleyin.

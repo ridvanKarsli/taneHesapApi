@@ -10,6 +10,7 @@ using TaneHesap.Application.Ingredients;
 using TaneHesap.Application.Notifications;
 using TaneHesap.Application.Platforms;
 using TaneHesap.Application.RecurringExpenses;
+using TaneHesap.Application.Reports;
 using TaneHesap.Application.Stock;
 using TaneHesap.Application.Suppliers;
 
@@ -38,6 +39,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IPlatformService, PlatformService>();
         services.AddScoped<IDailySalesService, DailySalesService>();
         services.AddScoped<IDailyClosingService, DailyClosingService>();
+        services.AddScoped<IReportService, ReportService>();
 
         return services;
     }
