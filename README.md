@@ -18,16 +18,15 @@ src/
 
 Bağımlılık yönü: `API → Infrastructure → Application → Domain` (Domain hiçbir şeye bağımlı değil).
 
-## Bu ortamda neyin doğrulandığı
+## Build durumu
 
-Bu proje, NuGet.org erişiminin organizasyon politikasıyla engellendiği bir sandbox ortamında
-hazırlandı. **TaneHesap.Domain ve TaneHesap.Application projeleri bu ortamda `dotnet build` ile
-derlenip doğrulandı** (hiçbir NuGet paketine ihtiyaç duymazlar). **TaneHesap.Infrastructure ve
-TaneHesap.API projeleri EF Core, ASP.NET Core Identity, JWT Bearer, Otp.NET ve Swashbuckle NuGet
-paketlerine ihtiyaç duyduğundan burada restore/build edilemedi** — kodları dikkatle, aynı
-pattern'leri kullanarak yazıldı ancak derleyici ile doğrulanmadı. İlk adım olarak localde
-`dotnet restore` + `dotnet build` çalıştırıp çıkan hataları (çoğunlukla küçük paket versiyon
-uyuşmazlıkları olması beklenir) gidermeniz gerekebilir.
+**Dört proje de (`Domain`, `Application`, `Infrastructure`, `API`) `dotnet restore` + `dotnet build`
+ile hatasız derleniyor** (Rıdvan'ın kendi makinesinde, .NET 10 SDK ile doğrulandı). Kod, geliştirme
+sürecinde NuGet.org erişiminin engellendiği bir sandbox ortamında yazıldı; bu yüzden `Domain` ve
+`Application` katmanları bilinçli olarak NuGet paketlerinden bağımsız tutuldu ve o ortamda sürekli
+derlenerek doğrulandı, `Infrastructure`/`API` katmanları ise (EF Core, Identity, JWT Bearer, Otp.NET,
+Swashbuckle paketlerine ihtiyaç duydukları için) ancak gerçek bir makinede doğrulanabildi — bu adım
+tamamlandı.
 
 ## Kurulum (yerelde)
 
@@ -146,7 +145,7 @@ veritabanında kalır ve `GET /api/notifications` ile her zaman okunabilir.
 
 ## Sonraki adımlar
 
-- `dotnet restore` + `dotnet build` ile Infrastructure/API katmanlarını doğrulayın.
+- ~~`dotnet restore` + `dotnet build` ile Infrastructure/API katmanlarını doğrulayın.~~ ✅ Tamamlandı.
 - İlk migration'ı oluşturup PostgreSQL'e uygulayın.
 - `InitialSuperAdmin:Username/Password` değerlerini tanımlayıp uygulamayı başlatarak ilk SUPER_ADMIN'i
   otomatik oluşturtun (bkz. "İlk SUPER_ADMIN kullanıcısını oluşturma").
