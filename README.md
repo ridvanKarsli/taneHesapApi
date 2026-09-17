@@ -54,10 +54,23 @@ uyuşmazlıkları olması beklenir) gidermeniz gerekebilir.
 
 ## İlk SUPER_ADMIN kullanıcısını oluşturma
 
-Uygulama açılışında `SuperAdmin` / `Admin` / `Employee` rolleri otomatik oluşturulur, ancak
-güvenlik gereği ilk SUPER_ADMIN kullanıcısı koda gömülmez. `IIdentityService.CreateAdminOrSuperAdminAsync`
-metodunu bir kerelik bir seed script/endpoint ile çağırarak veya `dotnet ef` / küçük bir konsol
-aracıyla ilk kullanıcıyı oluşturmanız gerekir — bu, projenin bir sonraki adımlarından biridir.
+Uygulama açılışında `SuperAdmin` / `Admin` / `Employee` rolleri otomatik oluşturulur. İlk
+SUPER_ADMIN de otomatik oluşturulabilir — ama güvenlik gereği kimlik bilgileri koda gömülmez:
+
+1. `dotnet user-secrets set "InitialSuperAdmin:Username" "ridvan"` ve
+   `dotnet user-secrets set "InitialSuperAdmin:Password" "GucluBirSifre123!"` ile (yerelde) veya
+   Railway'de ortam değişkeni olarak (`InitialSuperAdmin__Username`, `InitialSuperAdmin__Password`)
+   bu değerleri tanımlayın. `appsettings.json`'daki `InitialSuperAdmin` bölümü kasıtlı olarak boş
+   bırakılmıştır — gerçek değerler asla git'e commit edilmemelidir.
+2. Uygulamayı başlatın: `InitialSuperAdminSeeder` (bkz. `TaneHesap.Infrastructure/Persistence/Seed`)
+   açılışta sistemde hiç SUPER_ADMIN yoksa ve bu iki değer tanımlıysa otomatik olarak ilk
+   SUPER_ADMIN'i oluşturur; zaten bir SUPER_ADMIN varsa veya değerler boşsa hiçbir şey yapmaz
+   (idempotent — her açılışta güvenle çalışır, tekrar tekrar kullanıcı oluşturmaz).
+3. İlk girişte TOTP kurulumu gerekir (`POST /api/auth/totp-setup` — bkz. AuthController); SUPER_ADMIN
+   ve ADMIN için 2FA zorunludur (bkz. bölüm 2).
+4. Güvenlik için ilk kurulumdan sonra `InitialSuperAdmin:Username/Password` değerlerini ortamdan
+   kaldırmanız önerilir — seeder zaten bir SUPER_ADMIN varken hiçbir şey yapmaz, ama gereksiz yere
+   bir şifrenin ortam değişkeninde durması iyi bir pratik değildir.
 
 ## Uygulanan modüller (Faz 1-3 — vertical slice)
 
@@ -135,7 +148,8 @@ veritabanında kalır ve `GET /api/notifications` ile her zaman okunabilir.
 
 - `dotnet restore` + `dotnet build` ile Infrastructure/API katmanlarını doğrulayın.
 - İlk migration'ı oluşturup PostgreSQL'e uygulayın.
-- İlk SUPER_ADMIN kullanıcısını oluşturun.
+- `InitialSuperAdmin:Username/Password` değerlerini tanımlayıp uygulamayı başlatarak ilk SUPER_ADMIN'i
+  otomatik oluşturtun (bkz. "İlk SUPER_ADMIN kullanıcısını oluşturma").
 - Excel şablonu netleşince DailySales importuna gerçek `.xlsx` yükleme uç noktası ekleyin.
 - Frontend (React) projesini aynı repoya, `frontend/` klasörü altına ekleyin (SignalR bağlantısı
   için `@microsoft/signalr` paketiyle `/hubs/notifications`'a bağlanılabilir).

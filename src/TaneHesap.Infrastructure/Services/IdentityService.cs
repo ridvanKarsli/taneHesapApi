@@ -149,6 +149,9 @@ public class IdentityService : IIdentityService
         return users.Select(ToInfo).ToList();
     }
 
+    public Task<bool> AnySuperAdminExistsAsync()
+        => _userManager.Users.AnyAsync(u => u.Role == UserRole.SuperAdmin);
+
     public async Task<string> GetOrCreateTotpSecretAsync(Guid userId)
     {
         var user = await _userManager.FindByIdAsync(userId.ToString())

@@ -9,6 +9,7 @@ using TaneHesap.Application.Common.Interfaces;
 using TaneHesap.Infrastructure.Identity;
 using TaneHesap.Infrastructure.Persistence;
 using TaneHesap.Infrastructure.Persistence.Interceptors;
+using TaneHesap.Infrastructure.Persistence.Seed;
 using TaneHesap.Infrastructure.Services;
 
 namespace TaneHesap.Infrastructure;
@@ -91,6 +92,7 @@ public static class DependencyInjection
         services.AddScoped<IJwtTokenService, JwtTokenService>();
         services.AddScoped<ITotpService, TotpService>();
         services.AddScoped<IIdentityService, IdentityService>();
+        services.AddScoped<InitialSuperAdminSeeder>();
 
         return services;
     }

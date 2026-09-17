@@ -7,6 +7,7 @@ using TaneHesap.API.Services;
 using TaneHesap.Application.Common.Interfaces;
 using TaneHesap.Infrastructure;
 using TaneHesap.Infrastructure.Persistence;
+using TaneHesap.Infrastructure.Persistence.Seed;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -73,6 +74,11 @@ using (var scope = app.Services.CreateScope())
             await roleManager.CreateAsync(new IdentityRole<Guid>(roleName));
         }
     }
+
+    // İlk SUPER_ADMIN — sistemde hiç yoksa ve InitialSuperAdmin:Username/Password (appsettings/
+    // user-secrets/ortam değişkeni) tanımlıysa oluşturulur; aksi halde no-op (bkz. InitialSuperAdminSeeder).
+    var superAdminSeeder = scope.ServiceProvider.GetRequiredService<InitialSuperAdminSeeder>();
+    await superAdminSeeder.SeedAsync();
 }
 
 // --- HTTP pipeline ---

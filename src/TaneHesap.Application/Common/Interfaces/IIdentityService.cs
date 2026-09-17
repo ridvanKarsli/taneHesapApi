@@ -46,6 +46,9 @@ public interface IIdentityService
     /// <summary>Bir işletmenin ADMIN kullanıcılarını döner — in-app bildirimler bunlara gönderilir.</summary>
     Task<List<ApplicationUserInfo>> GetAdminsByBusinessAsync(Guid businessId);
 
+    /// <summary>Sistemde en az bir SUPER_ADMIN var mı — uygulama açılışındaki tek seferlik ilk kurulum seed'i için kullanılır.</summary>
+    Task<bool> AnySuperAdminExistsAsync();
+
     /// <summary>SUPER_ADMIN/ADMIN için TOTP secret'ı döner; yoksa yeni bir tane oluşturup kaydeder.</summary>
     Task<string> GetOrCreateTotpSecretAsync(Guid userId);
 
