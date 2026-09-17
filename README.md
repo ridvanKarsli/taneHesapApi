@@ -77,12 +77,15 @@ aracıyla ilk kullanıcıyı oluşturmanız gerekir — bu, projenin bir sonraki
   Alış kaydedilince otomatik olarak (1) malzeme stoğuna Purchase hareketi eklenir, (2) malzemenin
   güncel birim fiyatı bu alışla güncellenir; ödemeler toplamı tutara ulaşınca alış IsFullyPaid=true
   olur. `GET /api/suppliers/debt-summary` işletme genelinde ödenmemiş toplam borcu döner.
+- RecurringExpenses: ADMIN kira/elektrik gibi periyodik giderleri (haftalık/aylık/yıllık) tanımlar;
+  sistem bugüne göre güncel dönemi ve ödenip ödenmediğini otomatik hesaplar, `mark-period-paid` ile
+  bir dönem ödendi işaretlenir. `GET /api/recurring-expenses/due-for-reminder` dönem sonuna gelmiş
+  ve ödenmemiş giderleri döner (Notifications modülü bunu tüketecek).
 
-Diğer modüller (gün sonu Excel içe aktarımı ve fire analizi, düzenli giderler, paket servis
-platform komisyonları, raporlama, audit log middleware'i, SignalR bildirimleri) için Domain
-katmanındaki entity'ler ve veritabanı şeması hazır; Application/Infrastructure/API katmanlarında
-aynı pattern (Repository + Service + Controller) izlenerek eklenmesi gerekir — bkz. `proje-raporu.md`
-bölüm 3 ve 6 (fazlandırma).
+Diğer modüller (gün sonu Excel içe aktarımı ve fire analizi, paket servis platform komisyonları,
+raporlama, audit log middleware'i, SignalR bildirimleri) için Domain katmanındaki entity'ler ve
+veritabanı şeması hazır; Application/Infrastructure/API katmanlarında aynı pattern (Repository +
+Service + Controller) izlenerek eklenmesi gerekir — bkz. `proje-raporu.md` bölüm 3 ve 6 (fazlandırma).
 
 ## Sonraki adımlar
 
