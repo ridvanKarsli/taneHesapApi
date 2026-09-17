@@ -1,3 +1,4 @@
+using TaneHesap.Application.AuditLogs;
 using TaneHesap.Application.Auth;
 using TaneHesap.Application.Businesses;
 using TaneHesap.Application.DailyClosing;
@@ -40,6 +41,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IDailySalesService, DailySalesService>();
         services.AddScoped<IDailyClosingService, DailyClosingService>();
         services.AddScoped<IReportService, ReportService>();
+        services.AddScoped<IAuditLogService, AuditLogService>();
 
         return services;
     }

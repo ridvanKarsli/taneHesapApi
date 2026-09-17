@@ -9,11 +9,13 @@ public class NotificationService : INotificationService
 {
     private readonly IUnitOfWork _unitOfWork;
     private readonly IIdentityService _identityService;
+    private readonly IRealtimeNotifier _realtimeNotifier;
 
-    public NotificationService(IUnitOfWork unitOfWork, IIdentityService identityService)
+    public NotificationService(IUnitOfWork unitOfWork, IIdentityService identityService, IRealtimeNotifier realtimeNotifier)
     {
         _unitOfWork = unitOfWork;
         _identityService = identityService;
+        _realtimeNotifier = realtimeNotifier;
     }
 
     public async Task<List<NotificationDto>> GetForUserAsync(Guid businessId, Guid userId, bool unreadOnly, CancellationToken ct = default)
@@ -48,23 +50,39 @@ public class NotificationService : INotificationService
     public async Task NotifyAdminsAsync(Guid businessId, NotificationType type, string message, CancellationToken ct = default)
     {
         var admins = await _identityService.GetAdminsByBusinessAsync(businessId);
+        if (admins.Count == 0)
+        {
+            return;
+        }
+
         var repo = _unitOfWork.Repository<Notification>();
+        var created = new List<Notification>();
 
         foreach (var admin in admins)
         {
-            await repo.AddAsync(new Notification
+            var notification = new Notification
             {
                 BusinessId = businessId,
                 RecipientUserId = admin.UserId,
                 Type = type,
                 Message = message,
                 IsRead = false
-            }, ct);
+            };
+
+            await repo.AddAsync(notification, ct);
+            created.Add(notification);
         }
 
-        if (admins.Count > 0)
+        await _unitOfWork.SaveChangesAsync(ct);
+
+        // Kalıcı kayıt tamamlandıktan sonra bağlı istemcilere anlık iletim denenir; bir alıcının
+        // bağlı olmaması iş akışını (bildirim kaydını) etkilemez, sadece anlık teslimat atlanır.
+        foreach (var notification in created)
         {
-            await _unitOfWork.SaveChangesAsync(ct);
+            await _realtimeNotifier.NotifyUserAsync(
+                notification.RecipientUserId,
+                new NotificationPushDto(notification.Id, notification.Type.ToString(), notification.Message, notification.CreatedAtUtc),
+                ct);
         }
     }
 

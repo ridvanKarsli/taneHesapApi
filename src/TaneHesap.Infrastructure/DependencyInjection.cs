@@ -8,6 +8,7 @@ using System.Text;
 using TaneHesap.Application.Common.Interfaces;
 using TaneHesap.Infrastructure.Identity;
 using TaneHesap.Infrastructure.Persistence;
+using TaneHesap.Infrastructure.Persistence.Interceptors;
 using TaneHesap.Infrastructure.Services;
 
 namespace TaneHesap.Infrastructure;
@@ -24,9 +25,12 @@ public static class DependencyInjection
         var connectionString = configuration.GetConnectionString("DefaultConnection")
             ?? throw new InvalidOperationException("ConnectionStrings:DefaultConnection tanımlı değil.");
 
-        services.AddDbContext<ApplicationDbContext>(options =>
+        services.AddScoped<AuditSaveChangesInterceptor>();
+
+        services.AddDbContext<ApplicationDbContext>((serviceProvider, options) =>
             options.UseNpgsql(connectionString, npgsql =>
-                npgsql.MigrationsAssembly(typeof(ApplicationDbContext).Assembly.FullName)));
+                    npgsql.MigrationsAssembly(typeof(ApplicationDbContext).Assembly.FullName))
+                .AddInterceptors(serviceProvider.GetRequiredService<AuditSaveChangesInterceptor>()));
 
         services.AddIdentityCore<ApplicationUser>(options =>
             {
@@ -59,6 +63,25 @@ public static class DependencyInjection
                     ValidAudience = jwtSection["Audience"] ?? "taneHesap",
                     IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secret)),
                     ClockSkew = TimeSpan.FromSeconds(30)
+                };
+
+                // SignalR (WebSocket/SSE) bağlantılarında tarayıcı Authorization header'ı
+                // gönderemeyebilir; bu yüzden hub bağlantılarında token query string üzerinden
+                // ("?access_token=...") de kabul edilir. Sadece hub path'i için geçerlidir.
+                options.Events = new JwtBearerEvents
+                {
+                    OnMessageReceived = context =>
+                    {
+                        var accessToken = context.Request.Query["access_token"];
+                        var path = context.HttpContext.Request.Path;
+
+                        if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/hubs"))
+                        {
+                            context.Token = accessToken;
+                        }
+
+                        return Task.CompletedTask;
+                    }
                 };
             });
 

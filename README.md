@@ -81,9 +81,11 @@ aracıyla ilk kullanıcıyı oluşturmanız gerekir — bu, projenin bir sonraki
   sistem bugüne göre güncel dönemi ve ödenip ödenmediğini otomatik hesaplar, `mark-period-paid` ile
   bir dönem ödendi işaretlenir. `GET /api/recurring-expenses/due-for-reminder` dönem sonuna gelmiş
   ve ödenmemiş giderleri döner.
-- Notifications: ADMIN'lere in-app bildirim (şimdilik düşük stok tetikleyicisi bağlı — StockMovements
-  ve DailyClosing stok düşümü sonrası eşik altına inen malzemeler için otomatik bildirim üretir),
+- Notifications: ADMIN'lere in-app bildirim (düşük stok tetikleyicisi bağlı — StockMovements ve
+  DailyClosing stok düşümü sonrası eşik altına inen malzemeler için otomatik bildirim üretir),
   okundu işaretleme. `IIdentityService.GetAdminsByBusinessAsync` bildirim alıcılarını bulur.
+  Kalıcı kayıt (REST ile okunabilir) yanında `IRealtimeNotifier` soyutlaması üzerinden SignalR
+  hub'ına (`/hubs/notifications`) anlık push da yapılır — bkz. bölüm "Gerçek zamanlı bildirimler".
 - Platforms: paket servis platformu (Yemeksepeti, Getir vb.) + komisyon yüzdesi CRUD.
 - DailySales: gün sonu satış satırlarını içe aktarır (`ExcelImportLog` ile), reçeteye göre o günün
   beklenen gelirini ve malzeme tüketimini hesaplar. **Not:** Excel şablonunun kesin kolon yapısı
@@ -97,12 +99,37 @@ aracıyla ilk kullanıcıyı oluşturmanız gerekir — bu, projenin bir sonraki
 - Reports: `GET /api/reports/period?fromDate=...&toDate=...` — aynı tarih verilirse günlük, geniş
   aralıkla haftalık/aylık rapor olur; toplam gelir/gider, nakit-kart kırılımı, dükkan içi/platform
   kırılımı, gider kategorisi bazlı toplam ve platform bazlı brüt/komisyon/net gelir döner.
+- AuditLogs: `GET /api/audit-logs` — sadece görüntüleme; kayıtlar servislerin haberi olmadan,
+  `AuditSaveChangesInterceptor` (EF Core `SaveChangesInterceptor`) tarafından her `SaveChanges`
+  çağrısında değişen entity'lerden otomatik üretilir (bkz. "Audit log nasıl çalışıyor").
 
-Kapsam dışı bırakılan/ertelenen küçük noktalar: paket servis komisyonunun gün sonu içe aktarımında
-otomatik bir Expense kaydına dönüştürülmesi (şu an Reports modülünde raporlama anında hesaplanıyor,
-ayrı bir gider kaydı olarak DB'ye yazılmıyor); audit log middleware'i (AuditLog entity'si hazır,
-otomatik yazım katmanı eklenmedi); SignalR ile gerçek zamanlı bildirim itme (Notifications modülü
-şu an sadece REST üzerinden okunuyor, anlık push yok).
+Kapsam dışı bırakılan/ertelenen tek küçük nokta: paket servis komisyonunun gün sonu içe
+aktarımında otomatik bir `Expense` kaydına dönüştürülmesi — şu an Reports modülünde raporlama
+anında hesaplanıyor, ayrı bir gider kaydı olarak DB'ye yazılmıyor.
+
+## Audit log nasıl çalışıyor (SOLID notu)
+
+Denetim kaydı, her serviste tek tek `AuditLog` eklemek yerine (bu hem tekrar/"spagetti" hem de
+unutulmaya açık olurdu) **tek bir yerde**, `TaneHesap.Infrastructure/Persistence/Interceptors/AuditSaveChangesInterceptor.cs`
+içinde toplanır:
+
+- `SaveChangesInterceptor`'ı miras alır, `ApplicationDbContext`'e `AddInterceptors(...)` ile bağlanır.
+- Her `SaveChanges`'ten önce `ChangeTracker`'daki Added/Modified/Deleted entity'leri tarar (AuditLog,
+  Notification, RefreshToken hariç) ve otomatik `AuditLog` satırı üretir.
+- Modified durumda **sadece gerçekten değişen alanları** loglar (tüm satırı değil) — gereksiz büyüme olmaz.
+- Servisler (ExpenseService, DishService vb.) audit logging'in var olduğunu bile bilmez — Single
+  Responsibility. Yeni bir entity eklendiğinde otomatik olarak denetime dahil olur — Open/Closed.
+
+## Gerçek zamanlı bildirimler (SignalR)
+
+`INotificationService`, bir bildirim oluşturduğunda hem veritabanına yazar hem de `IRealtimeNotifier`
+soyutlaması üzerinden anlık iletmeyi dener (Dependency Inversion — Application katmanı SignalR'ı
+bilmez). Somut implementasyon (`SignalRRealtimeNotifier`, composition root olan API katmanında) bir
+SignalR hub'ı (`Hubs/NotificationsHub`, `/hubs/notifications`) üzerinden `Clients.User(userId)` ile
+sadece ilgili ADMIN'e "ReceiveNotification" mesajı gönderir. JWT, WebSocket/SSE bağlantılarında
+`?access_token=...` query string üzerinden de kabul edilir (tarayıcı bu bağlantılarda Authorization
+header'ı gönderemeyebilir). Bir alıcı o an bağlı değilse anlık iletim sessizce atlanır; bildirim
+veritabanında kalır ve `GET /api/notifications` ile her zaman okunabilir.
 
 ## Sonraki adımlar
 
@@ -110,5 +137,5 @@ otomatik yazım katmanı eklenmedi); SignalR ile gerçek zamanlı bildirim itme 
 - İlk migration'ı oluşturup PostgreSQL'e uygulayın.
 - İlk SUPER_ADMIN kullanıcısını oluşturun.
 - Excel şablonu netleşince DailySales importuna gerçek `.xlsx` yükleme uç noktası ekleyin.
-- Audit log middleware'i ve SignalR ile anlık bildirim itmeyi ekleyin.
-- Frontend (React) projesini aynı repoya, `frontend/` klasörü altına ekleyin.
+- Frontend (React) projesini aynı repoya, `frontend/` klasörü altına ekleyin (SignalR bağlantısı
+  için `@microsoft/signalr` paketiyle `/hubs/notifications`'a bağlanılabilir).

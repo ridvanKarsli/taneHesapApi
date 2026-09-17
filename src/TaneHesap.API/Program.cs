@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.OpenApi.Models;
 using TaneHesap.API.Extensions;
+using TaneHesap.API.Hubs;
 using TaneHesap.API.Middleware;
 using TaneHesap.API.Services;
 using TaneHesap.Application.Common.Interfaces;
@@ -15,6 +16,12 @@ builder.Services.AddControllers();
 
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
+
+// SignalR: ADMIN'lere anlık in-app bildirim itmek için (bkz. Hubs/NotificationsHub,
+// Services/SignalRRealtimeNotifier). Application katmanı IRealtimeNotifier soyutlamasını kullanır,
+// somut SignalR implementasyonu composition root (API katmanı) olarak burada bağlanır.
+builder.Services.AddSignalR();
+builder.Services.AddScoped<IRealtimeNotifier, SignalRRealtimeNotifier>();
 
 builder.Services.AddApplicationServices();
 builder.Services.AddInfrastructure(builder.Configuration);
@@ -86,5 +93,6 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+app.MapHub<NotificationsHub>("/hubs/notifications");
 
 app.Run();
