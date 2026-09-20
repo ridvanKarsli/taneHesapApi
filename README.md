@@ -28,12 +28,53 @@ derlenerek doğrulandı, `Infrastructure`/`API` katmanları ise (EF Core, Identi
 Swashbuckle paketlerine ihtiyaç duydukları için) ancak gerçek bir makinede doğrulanabildi — bu adım
 tamamlandı.
 
-## Kurulum (yerelde)
+## Kurulum (yerelde) — hızlı yol
+
+PostgreSQL kuruluysa (`brew install postgresql@16 && brew services start postgresql@16` veya
+Postgres.app), tek komutla veritabanı, bağlantı dizesi/JWT secret (`dotnet user-secrets` ile —
+appsettings.json'a gerçek değer yazılmaz), ilk migration ve ilk SUPER_ADMIN hazırlanır:
+
+```bash
+cd backend
+./scripts/setup-local.sh
+```
+
+Script idempotenttir (tekrar çalıştırmak güvenlidir — var olan veritabanını/migration'ı atlar).
+Varsayılanları ortam değişkenleriyle özelleştirebilirsiniz (bkz. script başındaki yorum):
+`PGHOST`, `PGPORT`, `PGUSER`, `PGPASSWORD`, `DB_NAME`, `SUPERADMIN_USERNAME`,
+`SUPERADMIN_PASSWORD`, `SUPERADMIN_FULLNAME`. `SUPERADMIN_PASSWORD` verilmezse script güvenli
+rastgele bir şifre üretip ekranda gösterir. Script bittiğinde şunu çalıştırıp API'yi başlatabilirsiniz:
+
+```bash
+dotnet run --project src/TaneHesap.API
+```
+
+Geliştirme ortamında Swagger UI `/swagger` altında açılır (varsayılan port: `5292` — bkz.
+`src/TaneHesap.API/Properties/launchSettings.json`; frontend'in `.env`'indeki
+`VITE_API_BASE_URL` bu portla eşleşmeli).
+
+**Not (bu depoyu hazırlayan ortamla ilgili):** `setup-local.sh`, veritabanı oluşturma ve
+`dotnet user-secrets` adımlarına kadar bu geliştirme sürecinde gerçek bir PostgreSQL'e karşı test
+edildi ve doğrulandı. `dotnet restore`/`dotnet ef migrations add` adımları ise NuGet.org
+erişiminin engellendiği bir sandbox ortamında test edilemedi (bkz. "Build durumu") — bu adımlar
+NuGet'e erişimi olan senin kendi makinende sorunsuz çalışmalı; ilk çalıştırmada script bu adımı
+tamamlayıp `Migrations/` altına gerçek migration dosyalarını üretecek, bunları git'e commit etmeyi
+unutma.
+
+## Kurulum (yerelde) — elle, adım adım
+
+Script'in ne yaptığını görmek ya da elle kontrol etmek isterseniz:
 
 1. **PostgreSQL** kurun/çalıştırın, bir veritabanı oluşturun (örn. `tanehesap`).
-2. `src/TaneHesap.API/appsettings.json` içindeki `ConnectionStrings:DefaultConnection` ve
-   `Jwt:Secret` değerlerini güncelleyin (Secret için en az 32 karakterlik rastgele bir değer kullanın;
-   gerçek değerleri git'e commit etmeyin — bkz. `dotnet user-secrets` kullanımı).
+2. Bağlantı dizesi ve JWT secret'ı **appsettings.json'a değil**, `dotnet user-secrets` ile tanımlayın
+   (Secret için en az 32 karakterlik rastgele bir değer kullanın):
+   ```bash
+   cd src/TaneHesap.API
+   dotnet user-secrets init   # ilk seferde UserSecretsId'yi csproj'a ekler
+   dotnet user-secrets set "ConnectionStrings:DefaultConnection" "Host=localhost;Port=5432;Database=tanehesap;Username=postgres;Password=..."
+   dotnet user-secrets set "Jwt:Secret" "$(openssl rand -base64 48)"
+   cd ../..
+   ```
 3. Paketleri geri yükleyin ve derleyin:
    ```bash
    dotnet restore
@@ -54,7 +95,9 @@ tamamlandı.
 ## İlk SUPER_ADMIN kullanıcısını oluşturma
 
 Uygulama açılışında `SuperAdmin` / `Admin` / `Employee` rolleri otomatik oluşturulur. İlk
-SUPER_ADMIN de otomatik oluşturulabilir — ama güvenlik gereği kimlik bilgileri koda gömülmez:
+SUPER_ADMIN de otomatik oluşturulabilir — ama güvenlik gereği kimlik bilgileri koda gömülmez.
+`setup-local.sh` bunu sizin için `dotnet user-secrets` ile tanımlar (bkz. yukarısı); elle yapmak
+isterseniz:
 
 1. `dotnet user-secrets set "InitialSuperAdmin:Username" "ridvan"` ve
    `dotnet user-secrets set "InitialSuperAdmin:Password" "GucluBirSifre123!"` ile (yerelde) veya
