@@ -31,7 +31,11 @@ public interface IIdentityService
     Task<IdentityOperationResult> CreateEmployeeAsync(
         Guid businessId, string username, string password, string fullName);
 
-    Task<bool> UpdateEmployeeAsync(Guid userId, Guid businessId, string? fullName, string? username, string? newPassword);
+    /// <summary>
+    /// Bir işletmedeki, verilen role sahip kullanıcının bilgilerini günceller (EMPLOYEE'de ADMIN,
+    /// ADMIN'de SUPER_ADMIN tarafından çağrılır) — rol ve işletme eşleşmezse false döner.
+    /// </summary>
+    Task<bool> UpdateUserAsync(Guid userId, Guid businessId, UserRole role, string? fullName, string? username, string? newPassword);
 
     Task<bool> SetActiveAsync(Guid userId, bool isActive);
 
@@ -42,8 +46,11 @@ public interface IIdentityService
 
     Task<List<ApplicationUserInfo>> GetEmployeesByBusinessAsync(Guid businessId);
 
-    /// <summary>Bir işletmenin ADMIN kullanıcılarını döner — in-app bildirimler bunlara gönderilir.</summary>
+    /// <summary>Bir işletmenin AKTİF ADMIN kullanıcılarını döner — in-app bildirimler bunlara gönderilir.</summary>
     Task<List<ApplicationUserInfo>> GetAdminsByBusinessAsync(Guid businessId);
+
+    /// <summary>Bir işletmenin TÜM (aktif + pasif) ADMIN kullanıcılarını döner — SUPER_ADMIN yönetim ekranı içindir.</summary>
+    Task<List<ApplicationUserInfo>> GetAllAdminsByBusinessAsync(Guid businessId);
 
     /// <summary>Sistemde en az bir SUPER_ADMIN var mı — uygulama açılışındaki tek seferlik ilk kurulum seed'i için kullanılır.</summary>
     Task<bool> AnySuperAdminExistsAsync();

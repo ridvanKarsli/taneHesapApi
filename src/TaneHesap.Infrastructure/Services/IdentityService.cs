@@ -68,9 +68,9 @@ public class IdentityService : IIdentityService
         return IdentityOperationResult.Success(user.Id);
     }
 
-    public async Task<bool> UpdateEmployeeAsync(Guid userId, Guid businessId, string? fullName, string? username, string? newPassword)
+    public async Task<bool> UpdateUserAsync(Guid userId, Guid businessId, UserRole role, string? fullName, string? username, string? newPassword)
     {
-        var user = await _userManager.Users.FirstOrDefaultAsync(u => u.Id == userId && u.BusinessId == businessId && u.Role == UserRole.Employee);
+        var user = await _userManager.Users.FirstOrDefaultAsync(u => u.Id == userId && u.BusinessId == businessId && u.Role == role);
         if (user is null)
         {
             return false;
@@ -140,6 +140,15 @@ public class IdentityService : IIdentityService
     {
         var users = await _userManager.Users
             .Where(u => u.BusinessId == businessId && u.Role == UserRole.Admin && u.IsActive)
+            .ToListAsync();
+
+        return users.Select(ToInfo).ToList();
+    }
+
+    public async Task<List<ApplicationUserInfo>> GetAllAdminsByBusinessAsync(Guid businessId)
+    {
+        var users = await _userManager.Users
+            .Where(u => u.BusinessId == businessId && u.Role == UserRole.Admin)
             .ToListAsync();
 
         return users.Select(ToInfo).ToList();

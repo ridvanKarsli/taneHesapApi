@@ -1,5 +1,6 @@
 using TaneHesap.Application.Common.Exceptions;
 using TaneHesap.Application.Common.Interfaces;
+using TaneHesap.Domain.Enums;
 
 namespace TaneHesap.Application.Employees;
 
@@ -31,7 +32,8 @@ public class EmployeeService : IEmployeeService
 
     public async Task<EmployeeDto> UpdateAsync(Guid businessId, Guid employeeId, UpdateEmployeeRequest request, CancellationToken ct = default)
     {
-        var updated = await _identityService.UpdateEmployeeAsync(employeeId, businessId, request.FullName, request.Username, request.Password);
+        var updated = await _identityService.UpdateUserAsync(
+            employeeId, businessId, UserRole.Employee, request.FullName, request.Username, request.Password);
         if (!updated)
         {
             throw new NotFoundException("Employee", employeeId);

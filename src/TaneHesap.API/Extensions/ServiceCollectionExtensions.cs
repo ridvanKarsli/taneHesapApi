@@ -1,3 +1,4 @@
+using TaneHesap.Application.Admins;
 using TaneHesap.Application.AuditLogs;
 using TaneHesap.Application.Auth;
 using TaneHesap.Application.Businesses;
@@ -28,6 +29,7 @@ public static class ServiceCollectionExtensions
     {
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<IBusinessService, BusinessService>();
+        services.AddScoped<IAdminService, AdminService>();
         services.AddScoped<IExpenseTypeService, ExpenseTypeService>();
         services.AddScoped<IExpenseService, ExpenseService>();
         services.AddScoped<IEmployeeService, EmployeeService>();
