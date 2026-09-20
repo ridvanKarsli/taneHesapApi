@@ -35,7 +35,11 @@ public class AuthService : IAuthService
         }
 
         // SUPER_ADMIN ve ADMIN için authenticator (TOTP) zorunlu; EMPLOYEE için yok (bkz. bölüm 2).
-        if (user.Role is UserRole.SuperAdmin or UserRole.Admin)
+        // TotpEnabled henüz false ise (ilk kurulum tamamlanmamış — bkz. SetupTotpAsync/ConfirmTotpAsync),
+        // kod istenmez: kullanıcı önce kodsuz giriş yapıp /api/auth/totp/setup ile QR/secret alabilir,
+        // authenticator uygulamasına ekleyip /api/auth/totp/confirm ile kurulumu tamamlayabilir. TotpEnabled
+        // true olduktan sonra her girişte kod zorunludur.
+        if (user.Role is UserRole.SuperAdmin or UserRole.Admin && user.TotpEnabled)
         {
             if (string.IsNullOrWhiteSpace(request.TotpCode))
             {
@@ -99,6 +103,18 @@ public class AuthService : IAuthService
 
         var qrUri = _totpService.GenerateQrCodeUri(secret, user.Username);
         return new TotpSetupResponse(secret, qrUri);
+    }
+
+    public async Task<ServiceResult<bool>> ConfirmTotpAsync(Guid userId, string code, CancellationToken ct = default)
+    {
+        var totpValid = await _identityService.ValidateTotpCodeAsync(userId, code);
+        if (!totpValid)
+        {
+            return ServiceResult<bool>.Fail("Authenticator kodu hatalı.");
+        }
+
+        await _identityService.MarkTotpEnabledAsync(userId);
+        return ServiceResult<bool>.Ok(true);
     }
 
     private async Task<LoginResponse> IssueTokensAsync(

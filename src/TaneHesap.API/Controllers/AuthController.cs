@@ -73,4 +73,23 @@ public class AuthController : ControllerBase
         var response = await _authService.SetupTotpAsync(userId, ct);
         return Ok(response);
     }
+
+    /// <summary>
+    /// Authenticator uygulamasına eklenen secret'tan üretilen ilk kodu doğrulayıp kurulumu
+    /// tamamlar (TotpEnabled = true). Bundan sonraki girişlerde authenticator kodu zorunlu olur.
+    /// </summary>
+    [HttpPost("totp/confirm")]
+    [Authorize(Roles = "SuperAdmin,Admin")]
+    public async Task<IActionResult> ConfirmTotp([FromBody] TotpConfirmRequest request, CancellationToken ct)
+    {
+        var userId = _currentUserService.UserId!.Value;
+        var result = await _authService.ConfirmTotpAsync(userId, request.Code, ct);
+
+        if (!result.Success)
+        {
+            return BadRequest(new { error = result.ErrorMessage });
+        }
+
+        return NoContent();
+    }
 }

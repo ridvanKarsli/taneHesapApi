@@ -108,8 +108,19 @@ isterseniz:
    açılışta sistemde hiç SUPER_ADMIN yoksa ve bu iki değer tanımlıysa otomatik olarak ilk
    SUPER_ADMIN'i oluşturur; zaten bir SUPER_ADMIN varsa veya değerler boşsa hiçbir şey yapmaz
    (idempotent — her açılışta güvenle çalışır, tekrar tekrar kullanıcı oluşturmaz).
-3. İlk girişte TOTP kurulumu gerekir (`POST /api/auth/totp-setup` — bkz. AuthController); SUPER_ADMIN
-   ve ADMIN için 2FA zorunludur (bkz. bölüm 2).
+3. **Authenticator (TOTP) kurulumu — SUPER_ADMIN/ADMIN için zorunlu (bkz. bölüm 2):**
+   Yeni oluşturulan kullanıcının `TotpEnabled=false` olduğu için ilk girişte authenticator kodu
+   İSTENMEZ (bkz. `AuthService.LoginAsync`) — aksi halde secret hiç görülmeden kod zorunlu kılınırdı
+   (kör döngü). Sırasıyla:
+   1. `POST /api/auth/login` — sadece `Username`/`Password` ile (Swagger UI: `/swagger`), `TotpCode`
+      boş bırakılır. Dönen `AccessToken`'ı bir sonraki adımda `Authorization: Bearer <token>` olarak kullanın.
+   2. `POST /api/auth/totp/setup` (yetkili istek) — `Secret` ve `QrCodeUri` döner. `QrCodeUri`'yi bir
+      authenticator uygulamasına (Google/Microsoft Authenticator vb.) QR kod olarak ekleyin (Swagger'da
+      QR gösterilmez — `QrCodeUri`'yi bir `otpauth://` QR üretici ile görselleştirin, ya da `Secret`'ı
+      uygulamaya elle "manuel giriş" ile ekleyin).
+   3. Uygulamanın ürettiği 6 haneli kodla `POST /api/auth/totp/confirm` — `{ "code": "123456" }`. Kod
+      doğruysa `TotpEnabled=true` olur; bundan sonraki her girişte authenticator kodu zorunludur.
+   4. Bundan sonra `POST /api/auth/login`'i `TotpCode` ile çağırmanız gerekir.
 4. Güvenlik için ilk kurulumdan sonra `InitialSuperAdmin:Username/Password` değerlerini ortamdan
    kaldırmanız önerilir — seeder zaten bir SUPER_ADMIN varken hiçbir şey yapmaz, ama gereksiz yere
    bir şifrenin ortam değişkeninde durması iyi bir pratik değildir.
