@@ -56,15 +56,17 @@ ok "psql bulundu."
 # olduğu gibi kullanırız (otomatik tespiti atlarız); hiçbiri verilmemişse sırayla dener.
 
 try_connect() {
-  # $1=host ("" ise -h verilmez, unix socket kullanılır) $2=port $3=user $4=password ("" ise PGPASSWORD unset edilir)
+  # $1=host ("" ise -h verilmez, unix socket kullanılır) $2=port $3=user $4=password ("" ise şifresiz denenir)
+  # -w: ASLA interaktif şifre sormaz — yanlış/eksikse psql hemen (sessizce) başarısız olur. Bu
+  # olmadan psql, terminalde çalışırken kafa karıştırıcı ve yanıltıcı bir şifre istemi gösterir
+  # (denenen aday değil, kullanıcının o an elle girdiği şifre geçerli olur).
   local host="$1" port="$2" user="$3" pass="$4"
-  local -a args=(-U "$user" -d postgres -tAc 'select 1')
+  local -a args=(-w -U "$user" -d postgres -tAc 'select 1')
   [ -n "$host" ] && args=(-h "$host" -p "$port" "${args[@]}")
   if [ -n "$pass" ]; then
     PGPASSWORD="$pass" psql "${args[@]}" >/dev/null 2>&1
   else
-    unset PGPASSWORD 2>/dev/null || true
-    psql "${args[@]}" >/dev/null 2>&1
+    ( unset PGPASSWORD; psql "${args[@]}" >/dev/null 2>&1 )
   fi
 }
 
@@ -78,7 +80,7 @@ if [ -n "${PGHOST:-}${PGPORT:-}${PGUSER:-}${PGPASSWORD:-}" ]; then
     || fail "PostgreSQL'e bağlanılamadı (host=$PG_HOST port=$PG_PORT user=$PG_USER). Bilgileri kontrol edin."
   ok "PostgreSQL'e bağlanıldı (host=$PG_HOST port=$PG_PORT user=$PG_USER)."
 else
-  info "PostgreSQL bağlantısı otomatik tespit ediliyor…"
+  info "PostgreSQL bağlantısı otomatik tespit ediliyor… (sessizce dener, şifre sormaz)"
   OS_USER="$(whoami)"
   FOUND=0
   # Sırasıyla: unix socket + mevcut mac kullanıcısı (Homebrew/Postgres.app varsayılanı),
@@ -98,11 +100,23 @@ else
       break
     fi
   done
+  if [ "$FOUND" = "0" ] && [ -t 0 ]; then
+    # Bilinen hiçbir kombinasyon çalışmadı — tahmin etmeye devam etmek yerine tek seferlik,
+    # açık bir şekilde soruyoruz (sessiz varsayımlarla yanlış bir bağlantı dizesi üretmektense).
+    warn "Bilinen kombinasyonlarla bağlanılamadı, elle soruluyor."
+    read -r -p "PostgreSQL kullanıcı adı [postgres]: " ASK_USER
+    ASK_USER="${ASK_USER:-postgres}"
+    read -r -s -p "PostgreSQL şifresi (boşsa Enter): " ASK_PASS
+    echo
+    if try_connect "localhost" "5432" "$ASK_USER" "$ASK_PASS"; then
+      PG_HOST="localhost"; PG_PORT="5432"; PG_USER="$ASK_USER"; PG_PASSWORD="$ASK_PASS"
+      FOUND=1
+    fi
+  fi
   if [ "$FOUND" = "0" ]; then
-    fail "PostgreSQL'e hiçbir standart yöntemle bağlanılamadı. Sunucunun çalıştığından emin olun
-    (brew services list | grep postgresql) ve PGHOST/PGPORT/PGUSER/PGPASSWORD ortam değişkenleriyle
-    kendi bilgilerinizi verip tekrar deneyin, örn:
-      PGUSER=$OS_USER PGPASSWORD='' ./scripts/setup-local.sh"
+    fail "PostgreSQL'e bağlanılamadı. Sunucunun çalıştığından emin olun (brew services list | grep postgresql)
+    ve PGHOST/PGPORT/PGUSER/PGPASSWORD ortam değişkenleriyle doğru bilgileri verip tekrar deneyin, örn:
+      PGUSER=postgres PGPASSWORD='gercek-sifren' ./scripts/setup-local.sh"
   fi
   ok "PostgreSQL'e bağlanıldı (host=${PG_HOST:-<unix socket>} port=$PG_PORT user=$PG_USER$( [ -z "$PG_PASSWORD" ] && echo ", şifresiz" ))."
 fi
@@ -110,7 +124,7 @@ fi
 # --- 2) Veritabanı (yoksa oluştur, idempotent) --------------------------
 
 info "Veritabanı kontrol ediliyor: $DB_NAME"
-PSQL_ARGS=(-U "$PG_USER" -d postgres)
+PSQL_ARGS=(-w -U "$PG_USER" -d postgres)
 [ -n "$PG_HOST" ] && PSQL_ARGS=(-h "$PG_HOST" -p "$PG_PORT" "${PSQL_ARGS[@]}")
 if [ -n "$PG_PASSWORD" ]; then export PGPASSWORD="$PG_PASSWORD"; else unset PGPASSWORD 2>/dev/null || true; fi
 
