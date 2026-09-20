@@ -12,7 +12,7 @@ src/
                              Sadece Domain'e bağımlı; EF Core/Identity/JWT gibi altyapı paketlerine
                              bağımlı DEĞİL (composition root API katmanındadır).
   TaneHesap.Infrastructure  EF Core (PostgreSQL/Npgsql), ASP.NET Core Identity, JWT üretimi,
-                             TOTP (Otp.NET), repository/unit of work implementasyonları.
+                             repository/unit of work implementasyonları.
   TaneHesap.API              Controller'lar, Program.cs (DI kaydı, middleware), appsettings.
 ```
 
@@ -24,7 +24,7 @@ Bağımlılık yönü: `API → Infrastructure → Application → Domain` (Doma
 ile hatasız derleniyor** (Rıdvan'ın kendi makinesinde, .NET 10 SDK ile doğrulandı). Kod, geliştirme
 sürecinde NuGet.org erişiminin engellendiği bir sandbox ortamında yazıldı; bu yüzden `Domain` ve
 `Application` katmanları bilinçli olarak NuGet paketlerinden bağımsız tutuldu ve o ortamda sürekli
-derlenerek doğrulandı, `Infrastructure`/`API` katmanları ise (EF Core, Identity, JWT Bearer, Otp.NET,
+derlenerek doğrulandı, `Infrastructure`/`API` katmanları ise (EF Core, Identity, JWT Bearer,
 Swashbuckle paketlerine ihtiyaç duydukları için) ancak gerçek bir makinede doğrulanabildi — bu adım
 tamamlandı.
 
@@ -108,27 +108,17 @@ isterseniz:
    açılışta sistemde hiç SUPER_ADMIN yoksa ve bu iki değer tanımlıysa otomatik olarak ilk
    SUPER_ADMIN'i oluşturur; zaten bir SUPER_ADMIN varsa veya değerler boşsa hiçbir şey yapmaz
    (idempotent — her açılışta güvenle çalışır, tekrar tekrar kullanıcı oluşturmaz).
-3. **Authenticator (TOTP) kurulumu — SUPER_ADMIN/ADMIN için zorunlu (bkz. bölüm 2):**
-   Yeni oluşturulan kullanıcının `TotpEnabled=false` olduğu için ilk girişte authenticator kodu
-   İSTENMEZ (bkz. `AuthService.LoginAsync`) — aksi halde secret hiç görülmeden kod zorunlu kılınırdı
-   (kör döngü). Sırasıyla:
-   1. `POST /api/auth/login` — sadece `Username`/`Password` ile (Swagger UI: `/swagger`), `TotpCode`
-      boş bırakılır. Dönen `AccessToken`'ı bir sonraki adımda `Authorization: Bearer <token>` olarak kullanın.
-   2. `POST /api/auth/totp/setup` (yetkili istek) — `Secret` ve `QrCodeUri` döner. `QrCodeUri`'yi bir
-      authenticator uygulamasına (Google/Microsoft Authenticator vb.) QR kod olarak ekleyin (Swagger'da
-      QR gösterilmez — `QrCodeUri`'yi bir `otpauth://` QR üretici ile görselleştirin, ya da `Secret`'ı
-      uygulamaya elle "manuel giriş" ile ekleyin).
-   3. Uygulamanın ürettiği 6 haneli kodla `POST /api/auth/totp/confirm` — `{ "code": "123456" }`. Kod
-      doğruysa `TotpEnabled=true` olur; bundan sonraki her girişte authenticator kodu zorunludur.
-   4. Bundan sonra `POST /api/auth/login`'i `TotpCode` ile çağırmanız gerekir.
+3. `POST /api/auth/login` — `Username`/`Password` ile giriş yapın (Swagger UI: `/swagger`).
+   **Not:** authenticator (2FA) zorunluluğu kaldırıldı (bkz. Proje Raporu bölüm 2, 7) — SUPER_ADMIN
+   dahil tüm roller sadece kullanıcı adı/şifre ile giriş yapar, ek bir kod gerekmez.
 4. Güvenlik için ilk kurulumdan sonra `InitialSuperAdmin:Username/Password` değerlerini ortamdan
    kaldırmanız önerilir — seeder zaten bir SUPER_ADMIN varken hiçbir şey yapmaz, ama gereksiz yere
    bir şifrenin ortam değişkeninde durması iyi bir pratik değildir.
 
 ## Uygulanan modüller (Faz 1-3 — vertical slice)
 
-- Auth: login (SUPER_ADMIN/ADMIN için TOTP zorunlu, EMPLOYEE için yok), refresh token (rotation),
-  revoke, TOTP kurulumu.
+- Auth: login (tüm roller kullanıcı adı/şifre ile — authenticator/2FA zorunluluğu
+  kaldırıldı, bkz. Proje Raporu bölüm 2, 7), refresh token (rotation), revoke.
 - Businesses: SUPER_ADMIN için CRUD.
 - Employees: ADMIN'in kendi işletmesine çalışan ekleme/güncelleme.
 - ExpenseTypes: ADMIN yönetir, EMPLOYEE listeler.
