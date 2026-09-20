@@ -14,8 +14,7 @@ public record ApplicationUserInfo(
     string FullName,
     UserRole Role,
     Guid? BusinessId,
-    bool IsActive,
-    bool TotpEnabled);
+    bool IsActive);
 
 /// <summary>
 /// Application katmanı ile ASP.NET Core Identity (Infrastructure) arasındaki köprü.
@@ -49,10 +48,4 @@ public interface IIdentityService
     /// <summary>Sistemde en az bir SUPER_ADMIN var mı — uygulama açılışındaki tek seferlik ilk kurulum seed'i için kullanılır.</summary>
     Task<bool> AnySuperAdminExistsAsync();
 
-    /// <summary>SUPER_ADMIN/ADMIN için TOTP secret'ı döner; yoksa yeni bir tane oluşturup kaydeder.</summary>
-    Task<string> GetOrCreateTotpSecretAsync(Guid userId);
-
-    Task<bool> ValidateTotpCodeAsync(Guid userId, string code);
-
-    Task MarkTotpEnabledAsync(Guid userId);
 }

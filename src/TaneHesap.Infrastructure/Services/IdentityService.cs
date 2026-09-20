@@ -13,12 +13,10 @@ namespace TaneHesap.Infrastructure.Services;
 public class IdentityService : IIdentityService
 {
     private readonly UserManager<ApplicationUser> _userManager;
-    private readonly ITotpService _totpService;
 
-    public IdentityService(UserManager<ApplicationUser> userManager, ITotpService totpService)
+    public IdentityService(UserManager<ApplicationUser> userManager)
     {
         _userManager = userManager;
-        _totpService = totpService;
     }
 
     public async Task<IdentityOperationResult> CreateAdminOrSuperAdminAsync(
@@ -35,9 +33,7 @@ public class IdentityService : IIdentityService
             FullName = fullName,
             Role = role,
             BusinessId = businessId,
-            IsActive = true,
-            TotpSecret = _totpService.GenerateSecret(),
-            TotpEnabled = false
+            IsActive = true
         };
 
         var result = await _userManager.CreateAsync(user, password);
@@ -152,41 +148,6 @@ public class IdentityService : IIdentityService
     public Task<bool> AnySuperAdminExistsAsync()
         => _userManager.Users.AnyAsync(u => u.Role == UserRole.SuperAdmin);
 
-    public async Task<string> GetOrCreateTotpSecretAsync(Guid userId)
-    {
-        var user = await _userManager.FindByIdAsync(userId.ToString())
-            ?? throw new InvalidOperationException("Kullanıcı bulunamadı.");
-
-        if (string.IsNullOrEmpty(user.TotpSecret))
-        {
-            user.TotpSecret = _totpService.GenerateSecret();
-            await _userManager.UpdateAsync(user);
-        }
-
-        return user.TotpSecret;
-    }
-
-    public async Task<bool> ValidateTotpCodeAsync(Guid userId, string code)
-    {
-        var user = await _userManager.FindByIdAsync(userId.ToString());
-        if (user is null || string.IsNullOrEmpty(user.TotpSecret))
-        {
-            return false;
-        }
-
-        return _totpService.ValidateCode(user.TotpSecret, code);
-    }
-
-    public async Task MarkTotpEnabledAsync(Guid userId)
-    {
-        var user = await _userManager.FindByIdAsync(userId.ToString());
-        if (user is not null)
-        {
-            user.TotpEnabled = true;
-            await _userManager.UpdateAsync(user);
-        }
-    }
-
     private static ApplicationUserInfo ToInfo(ApplicationUser u) => new(
-        u.Id, u.UserName ?? string.Empty, u.FullName, u.Role, u.BusinessId, u.IsActive, u.TotpEnabled);
+        u.Id, u.UserName ?? string.Empty, u.FullName, u.Role, u.BusinessId, u.IsActive);
 }

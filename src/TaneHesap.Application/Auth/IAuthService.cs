@@ -23,12 +23,4 @@ public interface IAuthService
     /// <summary>Çıkış / "tüm cihazlardan çıkış yap" senaryosunda refresh token'ı iptal eder.</summary>
     Task RevokeRefreshTokenAsync(string refreshToken, CancellationToken ct = default);
 
-    /// <summary>SUPER_ADMIN/ADMIN ilk girişte authenticator kurulumu başlatır (secret + QR döner).</summary>
-    Task<TotpSetupResponse> SetupTotpAsync(Guid userId, CancellationToken ct = default);
-
-    /// <summary>
-    /// Authenticator uygulamasına eklenen secret'tan üretilen ilk kodu doğrulayıp kurulumu
-    /// tamamlar (TotpEnabled = true). Bundan sonraki girişlerde kod zorunlu olur.
-    /// </summary>
-    Task<ServiceResult<bool>> ConfirmTotpAsync(Guid userId, string code, CancellationToken ct = default);
 }

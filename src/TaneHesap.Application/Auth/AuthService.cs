@@ -1,6 +1,5 @@
 using TaneHesap.Application.Common.Interfaces;
 using TaneHesap.Domain.Entities;
-using TaneHesap.Domain.Enums;
 
 namespace TaneHesap.Application.Auth;
 
@@ -8,7 +7,6 @@ public class AuthService : IAuthService
 {
     private readonly IIdentityService _identityService;
     private readonly IJwtTokenService _jwtTokenService;
-    private readonly ITotpService _totpService;
     private readonly IUnitOfWork _unitOfWork;
 
     // Access token ~30 dakika, refresh token ~14 gün (bkz. Proje Raporu bölüm 8).
@@ -17,12 +15,10 @@ public class AuthService : IAuthService
     public AuthService(
         IIdentityService identityService,
         IJwtTokenService jwtTokenService,
-        ITotpService totpService,
         IUnitOfWork unitOfWork)
     {
         _identityService = identityService;
         _jwtTokenService = jwtTokenService;
-        _totpService = totpService;
         _unitOfWork = unitOfWork;
     }
 
@@ -34,25 +30,8 @@ public class AuthService : IAuthService
             return ServiceResult<LoginResponse>.Fail("Kullanıcı adı veya şifre hatalı.");
         }
 
-        // SUPER_ADMIN ve ADMIN için authenticator (TOTP) zorunlu; EMPLOYEE için yok (bkz. bölüm 2).
-        // TotpEnabled henüz false ise (ilk kurulum tamamlanmamış — bkz. SetupTotpAsync/ConfirmTotpAsync),
-        // kod istenmez: kullanıcı önce kodsuz giriş yapıp /api/auth/totp/setup ile QR/secret alabilir,
-        // authenticator uygulamasına ekleyip /api/auth/totp/confirm ile kurulumu tamamlayabilir. TotpEnabled
-        // true olduktan sonra her girişte kod zorunludur.
-        if (user.Role is UserRole.SuperAdmin or UserRole.Admin && user.TotpEnabled)
-        {
-            if (string.IsNullOrWhiteSpace(request.TotpCode))
-            {
-                return ServiceResult<LoginResponse>.Fail("Authenticator kodu gereklidir.");
-            }
-
-            var totpValid = await _identityService.ValidateTotpCodeAsync(user.UserId, request.TotpCode);
-            if (!totpValid)
-            {
-                return ServiceResult<LoginResponse>.Fail("Authenticator kodu hatalı.");
-            }
-        }
-
+        // Not: authenticator (2FA) zorunluluğu kaldırıldı — tüm roller sadece kullanıcı adı/şifre
+        // ile giriş yapar (bkz. Proje Raporu bölüm 2, 7).
         var response = await IssueTokensAsync(user, ipAddress, ct);
         return ServiceResult<LoginResponse>.Ok(response);
     }
@@ -93,28 +72,6 @@ public class AuthService : IAuthService
             repo.Update(existing);
             await _unitOfWork.SaveChangesAsync(ct);
         }
-    }
-
-    public async Task<TotpSetupResponse> SetupTotpAsync(Guid userId, CancellationToken ct = default)
-    {
-        var secret = await _identityService.GetOrCreateTotpSecretAsync(userId);
-        var user = await _identityService.GetByIdAsync(userId)
-            ?? throw new InvalidOperationException("Kullanıcı bulunamadı.");
-
-        var qrUri = _totpService.GenerateQrCodeUri(secret, user.Username);
-        return new TotpSetupResponse(secret, qrUri);
-    }
-
-    public async Task<ServiceResult<bool>> ConfirmTotpAsync(Guid userId, string code, CancellationToken ct = default)
-    {
-        var totpValid = await _identityService.ValidateTotpCodeAsync(userId, code);
-        if (!totpValid)
-        {
-            return ServiceResult<bool>.Fail("Authenticator kodu hatalı.");
-        }
-
-        await _identityService.MarkTotpEnabledAsync(userId);
-        return ServiceResult<bool>.Ok(true);
     }
 
     private async Task<LoginResponse> IssueTokensAsync(

@@ -90,7 +90,6 @@ public static class DependencyInjection
 
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         services.AddScoped<IJwtTokenService, JwtTokenService>();
-        services.AddScoped<ITotpService, TotpService>();
         services.AddScoped<IIdentityService, IdentityService>();
         services.AddScoped<InitialSuperAdminSeeder>();
 
