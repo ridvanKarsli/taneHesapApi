@@ -1,22 +1,23 @@
 #!/usr/bin/env bash
 # taneHesap backend — yerel geliştirme ortamını tek komutla hazırlar:
-#   1) PostgreSQL'de veritabanını oluşturur (yoksa),
-#   2) dotnet user-secrets ile bağlantı dizesi + JWT secret + ilk SUPER_ADMIN bilgilerini tanımlar,
-#   3) ilk EF Core migration'ını oluşturur (yoksa) ve veritabanına uygular.
+#   1) PostgreSQL'e nasıl bağlanılacağını otomatik tespit eder (Homebrew/Postgres.app/Docker gibi
+#      farklı kurulumlarda kullanıcı adı/şifre farklı olabiliyor — bkz. detect_postgres_connection),
+#   2) veritabanını oluşturur (yoksa),
+#   3) dotnet user-secrets ile bağlantı dizesi + JWT secret + ilk SUPER_ADMIN bilgilerini tanımlar,
+#   4) ilk EF Core migration'ını oluşturur (yoksa) ve veritabanına uygular.
 #
 # Neden bir script: appsettings.json'a gerçek şifre/secret yazmak yerine (git'e commit edilme
 # riski), .NET'in kendi "user-secrets" mekanizmasını kullanmak — bu script sadece o adımları
 # tekrarlanabilir/idempotent hale getiriyor. NuGet paketleri (EF Core, Identity, JWT, Npgsql)
-# yalnızca gerçek bir makinede restore edilebiliyor (bkz. README — bu depoyu yazan sandbox
-# ortamının NuGet.org erişimi kısıtlı), bu yüzden bu adımların SENİN kendi makinende çalışması
-# gerekiyor; script bunu kolaylaştırmak için var.
+# yalnızca NuGet.org'a erişimi olan gerçek bir makinede restore edilebiliyor, bu yüzden bu
+# script'in SENİN kendi makinende çalışması gerekiyor.
 #
 # Kullanım:
 #   cd backend
 #   ./scripts/setup-local.sh
 #
-# Ortam değişkenleriyle özelleştirme (hepsi opsiyonel, makul varsayılanlar var):
-#   PGHOST, PGPORT, PGUSER, PGPASSWORD   — PostgreSQL bağlantı bilgileri (varsayılan: localhost:5432, postgres/postgres)
+# Ortam değişkenleriyle özelleştirme (hepsi opsiyonel):
+#   PGHOST, PGPORT, PGUSER, PGPASSWORD   — verilirse otomatik tespit atlanır, doğrudan bunlar kullanılır.
 #   DB_NAME                              — oluşturulacak veritabanı adı (varsayılan: tanehesap)
 #   SUPERADMIN_USERNAME                  — ilk SUPER_ADMIN kullanıcı adı (varsayılan: ridvan)
 #   SUPERADMIN_PASSWORD                  — ilk SUPER_ADMIN şifresi (boşsa script güvenli rastgele bir şifre üretir ve ekranda gösterir)
@@ -30,17 +31,13 @@ API_PROJECT="$BACKEND_ROOT/src/TaneHesap.API"
 INFRA_PROJECT="$BACKEND_ROOT/src/TaneHesap.Infrastructure"
 MIGRATIONS_DIR="$INFRA_PROJECT/Migrations"
 
-PGHOST="${PGHOST:-localhost}"
-PGPORT="${PGPORT:-5432}"
-PGUSER="${PGUSER:-postgres}"
-PGPASSWORD="${PGPASSWORD:-postgres}"
 DB_NAME="${DB_NAME:-tanehesap}"
-
 SUPERADMIN_USERNAME="${SUPERADMIN_USERNAME:-ridvan}"
 SUPERADMIN_FULLNAME="${SUPERADMIN_FULLNAME:-Rıdvan}"
 
 info()  { printf '\n\033[1;34m==>\033[0m %s\n' "$1"; }
 ok()    { printf '\033[1;32m✓\033[0m %s\n' "$1"; }
+warn()  { printf '\033[1;33m!\033[0m %s\n' "$1"; }
 fail()  { printf '\033[1;31m✗ %s\033[0m\n' "$1" >&2; exit 1; }
 
 # --- 0) Ön koşullar -----------------------------------------------------
@@ -48,31 +45,88 @@ fail()  { printf '\033[1;31m✗ %s\033[0m\n' "$1" >&2; exit 1; }
 command -v dotnet >/dev/null 2>&1 || fail ".NET SDK bulunamadı. https://dotnet.microsoft.com/download adresinden .NET 10 SDK kurun."
 ok ".NET SDK bulundu ($(dotnet --version))."
 
-if ! command -v psql >/dev/null 2>&1; then
-  fail "psql (PostgreSQL istemcisi) bulunamadı. PostgreSQL kurulu değilse: brew install postgresql@16 && brew services start postgresql@16 (veya Postgres.app kullanın)."
-fi
+command -v psql >/dev/null 2>&1 || fail "psql (PostgreSQL istemcisi) bulunamadı. Kurulu değilse: brew install postgresql@16 && brew services start postgresql@16 (veya Postgres.app kullanın)."
 ok "psql bulundu."
 
-export PGPASSWORD
-if ! psql -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d postgres -c '\q' >/dev/null 2>&1; then
-  fail "PostgreSQL'e bağlanılamadı (host=$PGHOST port=$PGPORT user=$PGUSER). Sunucunun çalıştığından ve PGUSER/PGPASSWORD değerlerinin doğru olduğundan emin olun (örn. PGUSER=$USER ./scripts/setup-local.sh)."
-fi
-ok "PostgreSQL'e bağlanıldı."
+# --- 1) PostgreSQL bağlantısını bul --------------------------------------
+#
+# Farklı yerel kurulumlarda varsayılan kimlik farklıdır: Homebrew/Postgres.app genelde mac
+# kullanıcı adını şifresiz (peer/trust) superuser yapar, Docker/klasik kurulumlar genelde
+# postgres/postgres kullanır. PGHOST/PGPORT/PGUSER/PGPASSWORD'ten biri elle verilmişse onu
+# olduğu gibi kullanırız (otomatik tespiti atlarız); hiçbiri verilmemişse sırayla dener.
 
-# --- 1) Veritabanı (yoksa oluştur, idempotent) --------------------------
+try_connect() {
+  # $1=host ("" ise -h verilmez, unix socket kullanılır) $2=port $3=user $4=password ("" ise PGPASSWORD unset edilir)
+  local host="$1" port="$2" user="$3" pass="$4"
+  local -a args=(-U "$user" -d postgres -tAc 'select 1')
+  [ -n "$host" ] && args=(-h "$host" -p "$port" "${args[@]}")
+  if [ -n "$pass" ]; then
+    PGPASSWORD="$pass" psql "${args[@]}" >/dev/null 2>&1
+  else
+    unset PGPASSWORD 2>/dev/null || true
+    psql "${args[@]}" >/dev/null 2>&1
+  fi
+}
+
+if [ -n "${PGHOST:-}${PGPORT:-}${PGUSER:-}${PGPASSWORD:-}" ]; then
+  PG_HOST="${PGHOST:-localhost}"
+  PG_PORT="${PGPORT:-5432}"
+  PG_USER="${PGUSER:-postgres}"
+  PG_PASSWORD="${PGPASSWORD:-}"
+  info "PGHOST/PGPORT/PGUSER/PGPASSWORD elle verilmiş, otomatik tespit atlanıyor."
+  try_connect "$PG_HOST" "$PG_PORT" "$PG_USER" "$PG_PASSWORD" \
+    || fail "PostgreSQL'e bağlanılamadı (host=$PG_HOST port=$PG_PORT user=$PG_USER). Bilgileri kontrol edin."
+  ok "PostgreSQL'e bağlanıldı (host=$PG_HOST port=$PG_PORT user=$PG_USER)."
+else
+  info "PostgreSQL bağlantısı otomatik tespit ediliyor…"
+  OS_USER="$(whoami)"
+  FOUND=0
+  # Sırasıyla: unix socket + mevcut mac kullanıcısı (Homebrew/Postgres.app varsayılanı),
+  # localhost + mevcut kullanıcı, postgres/postgres (Docker/klasik), postgres kullanıcısı şifresiz.
+  CANDIDATES=(
+    "::$OS_USER:"
+    "localhost:5432:$OS_USER:"
+    "localhost:5432:postgres:postgres"
+    "localhost:5432:postgres:"
+  )
+  for candidate in "${CANDIDATES[@]}"; do
+    IFS=':' read -r c_host c_port c_user c_pass <<< "$candidate"
+    c_port="${c_port:-5432}"
+    if try_connect "$c_host" "$c_port" "$c_user" "$c_pass"; then
+      PG_HOST="$c_host"; PG_PORT="$c_port"; PG_USER="$c_user"; PG_PASSWORD="$c_pass"
+      FOUND=1
+      break
+    fi
+  done
+  if [ "$FOUND" = "0" ]; then
+    fail "PostgreSQL'e hiçbir standart yöntemle bağlanılamadı. Sunucunun çalıştığından emin olun
+    (brew services list | grep postgresql) ve PGHOST/PGPORT/PGUSER/PGPASSWORD ortam değişkenleriyle
+    kendi bilgilerinizi verip tekrar deneyin, örn:
+      PGUSER=$OS_USER PGPASSWORD='' ./scripts/setup-local.sh"
+  fi
+  ok "PostgreSQL'e bağlanıldı (host=${PG_HOST:-<unix socket>} port=$PG_PORT user=$PG_USER$( [ -z "$PG_PASSWORD" ] && echo ", şifresiz" ))."
+fi
+
+# --- 2) Veritabanı (yoksa oluştur, idempotent) --------------------------
 
 info "Veritabanı kontrol ediliyor: $DB_NAME"
-DB_EXISTS=$(psql -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname = '$DB_NAME'")
+PSQL_ARGS=(-U "$PG_USER" -d postgres)
+[ -n "$PG_HOST" ] && PSQL_ARGS=(-h "$PG_HOST" -p "$PG_PORT" "${PSQL_ARGS[@]}")
+if [ -n "$PG_PASSWORD" ]; then export PGPASSWORD="$PG_PASSWORD"; else unset PGPASSWORD 2>/dev/null || true; fi
+
+DB_EXISTS=$(psql "${PSQL_ARGS[@]}" -tAc "SELECT 1 FROM pg_database WHERE datname = '$DB_NAME'")
 if [ "$DB_EXISTS" = "1" ]; then
   ok "Veritabanı '$DB_NAME' zaten var, atlanıyor."
 else
-  psql -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d postgres -c "CREATE DATABASE \"$DB_NAME\"" >/dev/null
+  psql "${PSQL_ARGS[@]}" -c "CREATE DATABASE \"$DB_NAME\"" >/dev/null
   ok "Veritabanı '$DB_NAME' oluşturuldu."
 fi
 
-CONNECTION_STRING="Host=$PGHOST;Port=$PGPORT;Database=$DB_NAME;Username=$PGUSER;Password=$PGPASSWORD"
+CONN_HOST="${PG_HOST:-localhost}"
+CONNECTION_STRING="Host=$CONN_HOST;Port=$PG_PORT;Database=$DB_NAME;Username=$PG_USER"
+[ -n "$PG_PASSWORD" ] && CONNECTION_STRING="$CONNECTION_STRING;Password=$PG_PASSWORD"
 
-# --- 2) user-secrets: bağlantı dizesi + JWT secret + ilk SUPER_ADMIN ----
+# --- 3) user-secrets: bağlantı dizesi + JWT secret + ilk SUPER_ADMIN ----
 
 info "dotnet user-secrets hazırlanıyor ($API_PROJECT)"
 ( cd "$API_PROJECT" && dotnet user-secrets init >/dev/null 2>&1 || true )
@@ -95,7 +149,7 @@ fi
 
 ok "user-secrets tanımlandı (bağlantı dizesi, JWT secret, ilk SUPER_ADMIN bilgileri)."
 
-# --- 3) Migration (yoksa oluştur) + veritabanına uygula ------------------
+# --- 4) Migration (yoksa oluştur) + veritabanına uygula ------------------
 
 info "dotnet-ef aracı kontrol ediliyor"
 if ! dotnet tool list --global 2>/dev/null | grep -q dotnet-ef; then
@@ -130,12 +184,12 @@ echo
 echo "======================================================================"
 echo " Backend yerel ortam hazır."
 echo "======================================================================"
-echo " Veritabanı        : $DB_NAME (host=$PGHOST port=$PGPORT user=$PGUSER)"
-echo " SUPER_ADMIN        : $SUPERADMIN_USERNAME"
+echo " Veritabanı          : $DB_NAME (host=$CONN_HOST port=$PG_PORT user=$PG_USER)"
+echo " SUPER_ADMIN          : $SUPERADMIN_USERNAME"
 if [ "$GENERATED_PASSWORD" = "1" ]; then
-echo " SUPER_ADMIN şifresi : $SUPERADMIN_PASSWORD   (rastgele üretildi — bir yere not et)"
+echo " SUPER_ADMIN şifresi   : $SUPERADMIN_PASSWORD   (rastgele üretildi — bir yere not et)"
 else
-echo " SUPER_ADMIN şifresi : (SUPERADMIN_PASSWORD ortam değişkeninden verdiğin değer)"
+echo " SUPER_ADMIN şifresi   : (SUPERADMIN_PASSWORD ortam değişkeninden verdiğin değer)"
 fi
 echo
 echo " Şimdi API'yi başlatabilirsin:"
