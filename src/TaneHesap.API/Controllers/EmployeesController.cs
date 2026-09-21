@@ -36,4 +36,11 @@ public class EmployeesController : ControllerBase
     [HttpPut("{id:guid}")]
     public async Task<ActionResult<EmployeeDto>> Update(Guid id, [FromBody] UpdateEmployeeRequest request, CancellationToken ct)
         => Ok(await _employeeService.UpdateAsync(BusinessId, id, request, ct));
+
+    [HttpDelete("{id:guid}")]
+    public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
+    {
+        await _employeeService.DeleteAsync(BusinessId, id, ct);
+        return NoContent();
+    }
 }

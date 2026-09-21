@@ -1,3 +1,4 @@
+using TaneHesap.Application.Common.Exceptions;
 using TaneHesap.Application.Common.Interfaces;
 using TaneHesap.Application.Platforms;
 using TaneHesap.Domain.Entities;
@@ -104,6 +105,34 @@ public class DailySalesService : IDailySalesService
         await _commissionExpensePoster.PostCommissionExpensesAsync(businessId, affectedDates, importedByUserId, ct);
 
         return new ImportDailySalesResult(importLog.Id, request.Rows.Count, validEntries.Count, errors.Count, errors);
+    }
+
+    public async Task DeleteEntryAsync(Guid businessId, Guid entryId, Guid deletedByUserId, CancellationToken ct = default)
+    {
+        var repo = _unitOfWork.Repository<DailySalesEntry>();
+        var entry = await repo.GetByIdAsync(entryId, ct);
+        if (entry is null || entry.BusinessId != businessId)
+        {
+            throw new NotFoundException(nameof(DailySalesEntry), entryId);
+        }
+
+        repo.Remove(entry);
+        await _unitOfWork.SaveChangesAsync(ct);
+        await _commissionExpensePoster.PostCommissionExpensesAsync(businessId, new[] { entry.SaleDate }, deletedByUserId, ct);
+    }
+
+    public async Task<int> DeleteByDateAsync(Guid businessId, DateOnly date, Guid deletedByUserId, CancellationToken ct = default)
+    {
+        var repo = _unitOfWork.Repository<DailySalesEntry>();
+        var entries = await repo.ListAsync(e => e.BusinessId == businessId && e.SaleDate == date, ct);
+        foreach (var entry in entries)
+        {
+            repo.Remove(entry);
+        }
+
+        await _unitOfWork.SaveChangesAsync(ct);
+        await _commissionExpensePoster.PostCommissionExpensesAsync(businessId, new[] { date }, deletedByUserId, ct);
+        return entries.Count;
     }
 
     public async Task<List<DailySalesEntryDto>> GetByDateAsync(Guid businessId, DateOnly date, CancellationToken ct = default)

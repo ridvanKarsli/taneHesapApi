@@ -1,3 +1,4 @@
+using TaneHesap.Application.Common;
 using TaneHesap.Application.Common.Exceptions;
 using TaneHesap.Application.Common.Interfaces;
 using TaneHesap.Domain.Entities;
@@ -152,6 +153,51 @@ public class DishService : IDishService
             {
                 throw new NotFoundException(nameof(Ingredient), item.IngredientId);
             }
+        }
+    }
+
+    public async Task DeleteDishAsync(Guid businessId, Guid dishId, CancellationToken ct = default)
+    {
+        var dish = await GetTenantScopedDishAsync(businessId, dishId, ct);
+        var sizes = await _unitOfWork.Repository<DishSize>().ListAsync(s => s.DishId == dishId, ct);
+        var sizeIds = sizes.Select(s => s.Id).ToList();
+
+        DeletionGuard.EnsureNotUsed(
+            await _unitOfWork.Repository<DailySalesEntry>().AnyAsync(e => sizeIds.Contains(e.DishSizeId), ct),
+            "Bu ürün", "gün sonu satışlarında");
+
+        await RemoveSizesAsync(sizes, ct);
+        _unitOfWork.Repository<Dish>().Remove(dish);
+        await _unitOfWork.SaveChangesAsync(ct);
+    }
+
+    public async Task DeleteSizeAsync(Guid businessId, Guid dishId, Guid sizeId, CancellationToken ct = default)
+    {
+        await GetTenantScopedDishAsync(businessId, dishId, ct);
+        var size = (await _unitOfWork.Repository<DishSize>().ListAsync(s => s.Id == sizeId && s.DishId == dishId, ct)).FirstOrDefault()
+            ?? throw new NotFoundException(nameof(DishSize), sizeId);
+
+        DeletionGuard.EnsureNotUsed(
+            await _unitOfWork.Repository<DailySalesEntry>().AnyAsync(e => e.DishSizeId == sizeId, ct),
+            "Bu tabak boyu", "gün sonu satışlarında");
+
+        await RemoveSizesAsync(new List<DishSize> { size }, ct);
+        await _unitOfWork.SaveChangesAsync(ct);
+    }
+
+    /// <summary>Boyları reçete kalemleriyle birlikte siler (SaveChanges çağırmaz).</summary>
+    private async Task RemoveSizesAsync(List<DishSize> sizes, CancellationToken ct)
+    {
+        var sizeIds = sizes.Select(s => s.Id).ToList();
+        var recipeRepo = _unitOfWork.Repository<DishRecipeItem>();
+        foreach (var item in await recipeRepo.ListAsync(r => sizeIds.Contains(r.DishSizeId), ct))
+        {
+            recipeRepo.Remove(item);
+        }
+
+        foreach (var size in sizes)
+        {
+            _unitOfWork.Repository<DishSize>().Remove(size);
         }
     }
 

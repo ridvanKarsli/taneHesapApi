@@ -38,4 +38,12 @@ public class StockMovementsController : ControllerBase
         var created = await _stockMovementService.CreateAsync(BusinessId, request, userId, ct);
         return Ok(created);
     }
+
+    [HttpDelete("{id:guid}")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
+    {
+        await _stockMovementService.DeleteAsync(BusinessId, id, _currentUserService.UserId!.Value, ct);
+        return NoContent();
+    }
 }

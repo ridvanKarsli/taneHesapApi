@@ -9,4 +9,13 @@ public interface IExpenseService
     Task<List<ExpenseDto>> GetListAsync(Guid businessId, ExpenseListFilter filter, CancellationToken ct = default);
 
     Task<ExpenseDto> CreateAsync(Guid businessId, CreateExpenseRequest request, Guid createdByUserId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Gideri günceller. <paramref name="onlyCreatedBy"/> doluysa (EMPLOYEE) sadece o kullanıcının
+    /// girdiği gider güncellenebilir; başkasınınki 404 döner.
+    /// </summary>
+    Task<ExpenseDto> UpdateAsync(Guid businessId, Guid id, UpdateExpenseRequest request, Guid updatedByUserId, Guid? onlyCreatedBy, CancellationToken ct = default);
+
+    /// <summary>Gideri siler; <paramref name="onlyCreatedBy"/> kuralı güncellemedeki ile aynıdır.</summary>
+    Task DeleteAsync(Guid businessId, Guid id, Guid? onlyCreatedBy, CancellationToken ct = default);
 }

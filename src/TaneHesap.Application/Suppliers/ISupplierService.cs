@@ -14,6 +14,9 @@ public interface ISupplierService
 
     Task<SupplierDto> UpdateAsync(Guid businessId, Guid id, UpdateSupplierRequest request, Guid updatedByUserId, CancellationToken ct = default);
 
+    /// <summary>Hiç alış kaydı olmayan tedarikçiyi siler.</summary>
+    Task DeleteAsync(Guid businessId, Guid id, CancellationToken ct = default);
+
     Task<List<SupplierPurchaseDto>> GetPurchasesAsync(Guid businessId, Guid supplierId, CancellationToken ct = default);
 
     /// <summary>Yeni alış kaydeder; ilgili malzemenin stoğunu ve güncel birim fiyatını otomatik günceller.</summary>

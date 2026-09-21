@@ -66,6 +66,49 @@ public class ExpenseService : IExpenseService
         return ToDto(expense, expenseType.Name);
     }
 
+    public async Task<ExpenseDto> UpdateAsync(Guid businessId, Guid id, UpdateExpenseRequest request, Guid updatedByUserId, Guid? onlyCreatedBy, CancellationToken ct = default)
+    {
+        var expense = await GetEditableAsync(businessId, id, onlyCreatedBy, ct);
+        var expenseType = await _unitOfWork.Repository<ExpenseType>().GetByIdAsync(request.ExpenseTypeId, ct);
+        if (expenseType is null || expenseType.BusinessId != businessId)
+        {
+            throw new NotFoundException(nameof(ExpenseType), request.ExpenseTypeId);
+        }
+
+        expense.ExpenseTypeId = request.ExpenseTypeId;
+        expense.Amount = request.Amount;
+        expense.Quantity = request.Quantity;
+        expense.ExpenseDate = request.ExpenseDate;
+        expense.PaymentMethod = request.PaymentMethod;
+        expense.Description = request.Description;
+        expense.UpdatedByUserId = updatedByUserId;
+        expense.UpdatedAtUtc = DateTime.UtcNow;
+
+        _unitOfWork.Repository<Expense>().Update(expense);
+        await _unitOfWork.SaveChangesAsync(ct);
+
+        return ToDto(expense, expenseType.Name);
+    }
+
+    public async Task DeleteAsync(Guid businessId, Guid id, Guid? onlyCreatedBy, CancellationToken ct = default)
+    {
+        var expense = await GetEditableAsync(businessId, id, onlyCreatedBy, ct);
+        _unitOfWork.Repository<Expense>().Remove(expense);
+        await _unitOfWork.SaveChangesAsync(ct);
+    }
+
+    private async Task<Expense> GetEditableAsync(Guid businessId, Guid id, Guid? onlyCreatedBy, CancellationToken ct)
+    {
+        var expense = await _unitOfWork.Repository<Expense>().GetByIdAsync(id, ct);
+        if (expense is null || expense.BusinessId != businessId
+            || (onlyCreatedBy.HasValue && expense.CreatedByUserId != onlyCreatedBy.Value))
+        {
+            throw new NotFoundException(nameof(Expense), id);
+        }
+
+        return expense;
+    }
+
     private static ExpenseDto ToDto(Expense e, string expenseTypeName) => new(
         e.Id, e.ExpenseTypeId, expenseTypeName, e.Amount, e.Quantity, e.ExpenseDate,
         e.PaymentMethod, e.Description, e.CreatedByUserId, e.CreatedAtUtc);

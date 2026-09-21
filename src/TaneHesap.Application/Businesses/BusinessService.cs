@@ -7,10 +7,12 @@ namespace TaneHesap.Application.Businesses;
 public class BusinessService : IBusinessService
 {
     private readonly IUnitOfWork _unitOfWork;
+    private readonly IIdentityService _identityService;
 
-    public BusinessService(IUnitOfWork unitOfWork)
+    public BusinessService(IUnitOfWork unitOfWork, IIdentityService identityService)
     {
         _unitOfWork = unitOfWork;
+        _identityService = identityService;
     }
 
     public async Task<List<BusinessDto>> GetAllAsync(CancellationToken ct = default)
@@ -61,6 +63,23 @@ public class BusinessService : IBusinessService
         await _unitOfWork.SaveChangesAsync(ct);
 
         return ToDto(business);
+    }
+
+    public async Task DeleteAsync(Guid id, CancellationToken ct = default)
+    {
+        var repo = _unitOfWork.Repository<Business>();
+        var business = await repo.GetByIdAsync(id, ct) ?? throw new NotFoundException(nameof(Business), id);
+
+        var hasUsers = (await _identityService.GetAllAdminsByBusinessAsync(id)).Count > 0
+            || (await _identityService.GetEmployeesByBusinessAsync(id)).Count > 0;
+        if (hasUsers)
+        {
+            throw new ConflictAppException("Bu işletmenin yönetici veya çalışanları var; önce onları silin ya da işletmeyi pasif yapın.");
+        }
+
+        // Diğer tüm işletme verileri Business'a Restrict ile bağlı: veri varsa UnitOfWork anlaşılır bir 409 döner.
+        repo.Remove(business);
+        await _unitOfWork.SaveChangesAsync(ct);
     }
 
     private static BusinessDto ToDto(Business b) => new(b.Id, b.Name, b.Address, b.IsActive, b.CreatedAtUtc);

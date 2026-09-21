@@ -12,5 +12,11 @@ public interface IBusinessService
 
     Task<BusinessDto> CreateAsync(CreateBusinessRequest request, Guid createdByUserId, CancellationToken ct = default);
 
+    /// <summary>
+    /// Hiç kullanıcısı ve verisi olmayan (örn. yanlışlıkla açılmış) işletmeyi siler. Verisi olan işletme
+    /// silinmez, pasif yapılır — tüm geçmiş verinin kaybolmaması için.
+    /// </summary>
+    Task DeleteAsync(Guid id, CancellationToken ct = default);
+
     Task<BusinessDto> UpdateAsync(Guid id, UpdateBusinessRequest request, Guid updatedByUserId, CancellationToken ct = default);
 }

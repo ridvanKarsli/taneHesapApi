@@ -207,6 +207,21 @@ sadece ilgili ADMIN'e "ReceiveNotification" mesajı gönderir. JWT, WebSocket/SS
 header'ı gönderemeyebilir). Bir alıcı o an bağlı değilse anlık iletim sessizce atlanır; bildirim
 veritabanında kalır ve `GET /api/notifications` ile her zaman okunabilir.
 
+## Silme kuralları
+
+Katalog kayıtları (gider türü, malzeme, ürün/boy, platform, tedarikçi, düzenli gider) **sadece geçmiş
+verilerde kullanılmadıysa** silinir; kullanıldıysa 409 ile "silmek yerine pasif yapın" mesajı döner —
+raporlar ve denetim kayıtları bozulmasın diye. Kontroller tek noktadan (`Application/Common/DeletionGuard`)
+yapılır; `UnitOfWork` ayrıca PostgreSQL yabancı anahtar ihlalini (23503) aynı anlaşılır 409'a çevirir
+(gözden kaçan bir ilişki için son güvenlik ağı).
+
+- Giderler: ADMIN hepsini, EMPLOYEE sadece kendi girdiklerini düzenler/siler.
+- Gün sonu satışları: tek satır veya bir günün tümü silinebilir (aynı dosya iki kez yüklendiyse);
+  o günün platform komisyonu gideri otomatik yeniden hesaplanır.
+- Stok hareketleri: sadece elle girilenler (sayım düzeltmesi/fire) silinir, stok geri alınır.
+- Çalışan/yönetici: hesap ve açık oturumları silinir; girdiği kayıtlar geçmiş olarak kalır.
+- İşletme: kullanıcısı ve verisi yoksa silinir; aksi halde pasif yapılır.
+
 ## Yayına alma (Railway)
 
 Repo kökündeki `Dockerfile` ile Railway servisi doğrudan oluşturulur (Railway Dockerfile'ı

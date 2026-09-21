@@ -15,6 +15,9 @@ public interface IIngredientService
 
     Task<IngredientDto> UpdateAsync(Guid businessId, Guid id, UpdateIngredientRequest request, Guid updatedByUserId, CancellationToken ct = default);
 
+    /// <summary>Reçetede, stok hareketinde, alışta veya gün sonu kaydında hiç kullanılmamış malzemeyi siler.</summary>
+    Task DeleteAsync(Guid businessId, Guid id, CancellationToken ct = default);
+
     /// <summary>Minimum eşiğin altında kalan (aktif) malzemeleri döner — düşük stok bildirimi için kullanılır.</summary>
     Task<List<IngredientDto>> GetBelowThresholdAsync(Guid businessId, CancellationToken ct = default);
 }

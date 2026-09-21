@@ -66,4 +66,20 @@ public class DishesController : ControllerBase
         var userId = _currentUserService.UserId!.Value;
         return Ok(await _dishService.UpdateSizeAsync(BusinessId, dishId, sizeId, request, userId, ct));
     }
+
+    [HttpDelete("{id:guid}")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
+    {
+        await _dishService.DeleteDishAsync(BusinessId, id, ct);
+        return NoContent();
+    }
+
+    [HttpDelete("{dishId:guid}/sizes/{sizeId:guid}")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> DeleteSize(Guid dishId, Guid sizeId, CancellationToken ct)
+    {
+        await _dishService.DeleteSizeAsync(BusinessId, dishId, sizeId, ct);
+        return NoContent();
+    }
 }

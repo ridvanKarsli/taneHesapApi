@@ -12,5 +12,8 @@ public interface IAdminService
 
     Task<AdminDto> CreateAsync(Guid businessId, CreateAdminRequest request, CancellationToken ct = default);
 
+    /// <summary>Yönetici hesabını siler (girdiği kayıtlar geçmiş olarak kalır).</summary>
+    Task DeleteAsync(Guid businessId, Guid adminId, CancellationToken ct = default);
+
     Task<AdminDto> UpdateAsync(Guid businessId, Guid adminId, UpdateAdminRequest request, CancellationToken ct = default);
 }

@@ -15,6 +15,15 @@ public interface IDailySalesService
 
     Task<List<DailySalesEntryDto>> GetByDateAsync(Guid businessId, DateOnly date, CancellationToken ct = default);
 
+    /// <summary>
+    /// Yanlış girilmiş tek bir satış satırını siler; o günün platform komisyonu gideri yeniden hesaplanır.
+    /// Gün sonu kapanışı zaten yapıldıysa fire raporu kapanış yeniden gönderilince güncellenir.
+    /// </summary>
+    Task DeleteEntryAsync(Guid businessId, Guid entryId, Guid deletedByUserId, CancellationToken ct = default);
+
+    /// <summary>Bir günün tüm satış satırlarını siler (örn. aynı dosya iki kez yüklendiyse); silinen satır sayısını döner.</summary>
+    Task<int> DeleteByDateAsync(Guid businessId, DateOnly date, Guid deletedByUserId, CancellationToken ct = default);
+
     /// <summary>O gün için sistemin (reçete × satış adedi) hesapladığı beklenen gelir ve malzeme tüketimi.</summary>
     Task<ExpectedDaySummaryDto> GetExpectedSummaryAsync(Guid businessId, DateOnly date, CancellationToken ct = default);
 }

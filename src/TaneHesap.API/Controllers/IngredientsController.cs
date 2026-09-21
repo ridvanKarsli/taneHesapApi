@@ -53,4 +53,12 @@ public class IngredientsController : ControllerBase
         var userId = _currentUserService.UserId!.Value;
         return Ok(await _ingredientService.UpdateAsync(BusinessId, id, request, userId, ct));
     }
+
+    [HttpDelete("{id:guid}")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
+    {
+        await _ingredientService.DeleteAsync(BusinessId, id, ct);
+        return NoContent();
+    }
 }

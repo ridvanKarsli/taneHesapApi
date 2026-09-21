@@ -13,6 +13,9 @@ public interface IRepository<T> where T : BaseEntity
 
     Task<List<T>> ListAsync(Expression<Func<T, bool>>? predicate = null, CancellationToken ct = default);
 
+    /// <summary>Koşula uyan en az bir kayıt var mı (silme öncesi kullanım kontrolleri için — satırları yüklemez).</summary>
+    Task<bool> AnyAsync(Expression<Func<T, bool>> predicate, CancellationToken ct = default);
+
     Task AddAsync(T entity, CancellationToken ct = default);
 
     void Update(T entity);

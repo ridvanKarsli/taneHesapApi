@@ -15,6 +15,12 @@ public interface IDishService
 
     Task<DishDto> UpdateDishAsync(Guid businessId, Guid dishId, UpdateDishRequest request, Guid updatedByUserId, CancellationToken ct = default);
 
+    /// <summary>Hiç satılmamış ürünü (boyları ve reçeteleriyle) siler.</summary>
+    Task DeleteDishAsync(Guid businessId, Guid dishId, CancellationToken ct = default);
+
+    /// <summary>Hiç satılmamış tabak boyunu (reçetesiyle) siler.</summary>
+    Task DeleteSizeAsync(Guid businessId, Guid dishId, Guid sizeId, CancellationToken ct = default);
+
     Task<DishSizeDto> AddSizeAsync(Guid businessId, Guid dishId, CreateDishSizeRequest request, Guid createdByUserId, CancellationToken ct = default);
 
     Task<DishSizeDto> UpdateSizeAsync(Guid businessId, Guid dishId, Guid sizeId, UpdateDishSizeRequest request, Guid updatedByUserId, CancellationToken ct = default);

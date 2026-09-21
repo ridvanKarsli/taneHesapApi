@@ -70,4 +70,12 @@ public class SuppliersController : ControllerBase
         var updated = await _supplierService.AddPaymentAsync(BusinessId, purchaseId, request, UserId, ct);
         return Ok(updated);
     }
+
+    [HttpDelete("{id:guid}")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
+    {
+        await _supplierService.DeleteAsync(BusinessId, id, ct);
+        return NoContent();
+    }
 }

@@ -1,3 +1,6 @@
+using Microsoft.EntityFrameworkCore;
+using Npgsql;
+using TaneHesap.Application.Common.Exceptions;
 using TaneHesap.Application.Common.Interfaces;
 using TaneHesap.Domain.Common;
 
@@ -25,5 +28,21 @@ public class UnitOfWork : IUnitOfWork
         return repo;
     }
 
-    public Task<int> SaveChangesAsync(CancellationToken ct = default) => _context.SaveChangesAsync(ct);
+    /// <summary>
+    /// Silinmek istenen kayıt başka kayıtlarda kullanılıyorsa (PostgreSQL 23503 — yabancı anahtar ihlali)
+    /// kullanıcıya anlaşılır bir 409 döner. Servislerdeki açık kullanım kontrollerinin arkasındaki son
+    /// güvenlik ağıdır; "Beklenmeyen bir hata oluştu" yerine ne yapılacağı söylenir.
+    /// </summary>
+    public async Task<int> SaveChangesAsync(CancellationToken ct = default)
+    {
+        try
+        {
+            return await _context.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.ForeignKeyViolation })
+        {
+            throw new ConflictAppException(
+                "Bu kayıt başka kayıtlarda kullanıldığı için silinemez. Silmek yerine pasif yapabilirsiniz.");
+        }
+    }
 }

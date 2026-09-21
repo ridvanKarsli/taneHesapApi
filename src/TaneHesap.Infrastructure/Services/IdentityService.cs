@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using TaneHesap.Application.Common.Interfaces;
 using TaneHesap.Domain.Enums;
 using TaneHesap.Infrastructure.Identity;
+using TaneHesap.Infrastructure.Persistence;
 
 namespace TaneHesap.Infrastructure.Services;
 
@@ -13,10 +14,12 @@ namespace TaneHesap.Infrastructure.Services;
 public class IdentityService : IIdentityService
 {
     private readonly UserManager<ApplicationUser> _userManager;
+    private readonly ApplicationDbContext _dbContext;
 
-    public IdentityService(UserManager<ApplicationUser> userManager)
+    public IdentityService(UserManager<ApplicationUser> userManager, ApplicationDbContext dbContext)
     {
         _userManager = userManager;
+        _dbContext = dbContext;
     }
 
     public async Task<IdentityOperationResult> CreateAdminOrSuperAdminAsync(
@@ -107,6 +110,22 @@ public class IdentityService : IIdentityService
         user.IsActive = isActive;
         await _userManager.UpdateAsync(user);
         return true;
+    }
+
+    public async Task<bool> DeleteUserAsync(Guid userId, Guid businessId, UserRole role)
+    {
+        var user = await _userManager.Users.FirstOrDefaultAsync(u => u.Id == userId && u.BusinessId == businessId && u.Role == role);
+        if (user is null)
+        {
+            return false;
+        }
+
+        var sessions = await _dbContext.RefreshTokens.Where(t => t.UserId == userId).ToListAsync();
+        _dbContext.RefreshTokens.RemoveRange(sessions);
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _userManager.DeleteAsync(user);
+        return result.Succeeded;
     }
 
     public async Task<ApplicationUserInfo?> ValidatePasswordAsync(string username, string password)

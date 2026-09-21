@@ -46,4 +46,12 @@ public class PlatformsController : ControllerBase
     [Authorize(Roles = "Admin")]
     public async Task<ActionResult<PlatformDto>> Update(Guid id, [FromBody] UpdatePlatformRequest request, CancellationToken ct)
         => Ok(await _platformService.UpdateAsync(BusinessId, id, request, UserId, ct));
+
+    [HttpDelete("{id:guid}")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
+    {
+        await _platformService.DeleteAsync(BusinessId, id, ct);
+        return NoContent();
+    }
 }

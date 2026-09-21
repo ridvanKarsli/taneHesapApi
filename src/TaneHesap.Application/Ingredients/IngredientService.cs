@@ -1,3 +1,4 @@
+using TaneHesap.Application.Common;
 using TaneHesap.Application.Common.Exceptions;
 using TaneHesap.Application.Common.Interfaces;
 using TaneHesap.Domain.Entities;
@@ -66,6 +67,23 @@ public class IngredientService : IIngredientService
         var items = await _unitOfWork.Repository<Ingredient>()
             .ListAsync(i => i.BusinessId == businessId && i.IsActive && i.CurrentStockQuantity <= i.MinimumStockThreshold, ct);
         return items.OrderBy(i => i.Name).Select(ToDto).ToList();
+    }
+
+    public async Task DeleteAsync(Guid businessId, Guid id, CancellationToken ct = default)
+    {
+        var entity = await GetTenantScopedAsync(businessId, id, ct);
+
+        DeletionGuard.EnsureNotUsed(
+            await _unitOfWork.Repository<DishRecipeItem>().AnyAsync(r => r.IngredientId == id, ct), "Bu malzeme", "bir reçetede");
+        DeletionGuard.EnsureNotUsed(
+            await _unitOfWork.Repository<StockMovement>().AnyAsync(m => m.IngredientId == id, ct)
+            || await _unitOfWork.Repository<SupplierPurchase>().AnyAsync(p => p.IngredientId == id, ct)
+            || await _unitOfWork.Repository<DailyActualConsumptionItem>().AnyAsync(i => i.IngredientId == id, ct)
+            || await _unitOfWork.Repository<DailyLossReportItem>().AnyAsync(i => i.IngredientId == id, ct),
+            "Bu malzeme", "stok/alış/gün sonu geçmişinde");
+
+        _unitOfWork.Repository<Ingredient>().Remove(entity);
+        await _unitOfWork.SaveChangesAsync(ct);
     }
 
     private async Task<Ingredient> GetTenantScopedAsync(Guid businessId, Guid id, CancellationToken ct)

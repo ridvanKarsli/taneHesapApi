@@ -31,4 +31,11 @@ public class AdminsController : ControllerBase
     [HttpPut("{adminId:guid}")]
     public async Task<ActionResult<AdminDto>> Update(Guid businessId, Guid adminId, [FromBody] UpdateAdminRequest request, CancellationToken ct)
         => Ok(await _adminService.UpdateAsync(businessId, adminId, request, ct));
+
+    [HttpDelete("{adminId:guid}")]
+    public async Task<IActionResult> Delete(Guid businessId, Guid adminId, CancellationToken ct)
+    {
+        await _adminService.DeleteAsync(businessId, adminId, ct);
+        return NoContent();
+    }
 }

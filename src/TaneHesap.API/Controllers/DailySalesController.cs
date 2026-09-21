@@ -42,4 +42,16 @@ public class DailySalesController : ControllerBase
     [HttpGet("expected-summary")]
     public async Task<ActionResult<ExpectedDaySummaryDto>> GetExpectedSummary([FromQuery] DateOnly date, CancellationToken ct)
         => Ok(await _dailySalesService.GetExpectedSummaryAsync(BusinessId, date, ct));
+
+    [HttpDelete("entries/{id:guid}")]
+    public async Task<IActionResult> DeleteEntry(Guid id, CancellationToken ct)
+    {
+        await _dailySalesService.DeleteEntryAsync(BusinessId, id, UserId, ct);
+        return NoContent();
+    }
+
+    /// <summary>Bir günün tüm satışlarını siler (aynı dosya iki kez yüklendiyse düzeltmek için).</summary>
+    [HttpDelete("by-date")]
+    public async Task<ActionResult<int>> DeleteByDate([FromQuery] DateOnly date, CancellationToken ct)
+        => Ok(await _dailySalesService.DeleteByDateAsync(BusinessId, date, UserId, ct));
 }

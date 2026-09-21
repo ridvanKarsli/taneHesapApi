@@ -51,4 +51,11 @@ public class RecurringExpensesController : ControllerBase
     [HttpPost("{id:guid}/mark-period-paid")]
     public async Task<ActionResult<RecurringExpenseDto>> MarkPeriodPaid(Guid id, [FromBody] MarkPeriodPaidRequest request, CancellationToken ct)
         => Ok(await _recurringExpenseService.MarkPeriodPaidAsync(BusinessId, id, request, UserId, ct));
+
+    [HttpDelete("{id:guid}")]
+    public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
+    {
+        await _recurringExpenseService.DeleteAsync(BusinessId, id, ct);
+        return NoContent();
+    }
 }

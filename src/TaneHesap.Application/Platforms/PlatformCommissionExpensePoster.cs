@@ -35,16 +35,12 @@ public class PlatformCommissionExpensePoster : IPlatformCommissionExpensePoster
             return;
         }
 
+        // Satışlar silindiğinde de çağrılır: o gün satışı kalmayan platformun eski komisyon gideri kaldırılır.
         var platformSales = await _unitOfWork.Repository<DailySalesEntry>()
             .ListAsync(e => e.BusinessId == businessId
                 && e.Channel == SalesChannel.Platform
                 && e.PlatformId != null
                 && distinctDates.Contains(e.SaleDate), ct);
-
-        if (platformSales.Count == 0)
-        {
-            return;
-        }
 
         var grossByPlatformAndDate = platformSales
             .GroupBy(e => (PlatformId: e.PlatformId!.Value, e.SaleDate))
@@ -54,16 +50,17 @@ public class PlatformCommissionExpensePoster : IPlatformCommissionExpensePoster
 
         foreach (var platform in platforms)
         {
-            var expenseType = await GetOrCreateCommissionExpenseTypeAsync(businessId, platform, expenseTypes, postedByUserId, ct);
-
             foreach (var date in distinctDates)
             {
-                if (!grossByPlatformAndDate.TryGetValue((platform.Id, date), out var grossAmount))
+                if (grossByPlatformAndDate.TryGetValue((platform.Id, date), out var grossAmount))
                 {
-                    continue;
+                    var expenseType = await GetOrCreateCommissionExpenseTypeAsync(businessId, platform, expenseTypes, postedByUserId, ct);
+                    await UpsertCommissionExpenseAsync(businessId, expenseType, platform, date, grossAmount, postedByUserId, ct);
                 }
-
-                await UpsertCommissionExpenseAsync(businessId, expenseType, platform, date, grossAmount, postedByUserId, ct);
+                else
+                {
+                    await RemoveCommissionExpenseAsync(businessId, platform, date, expenseTypes, ct);
+                }
             }
         }
 
@@ -93,6 +90,21 @@ public class PlatformCommissionExpensePoster : IPlatformCommissionExpensePoster
         expenseTypes.Add(expenseType);
 
         return expenseType;
+    }
+
+    private async Task RemoveCommissionExpenseAsync(Guid businessId, Platform platform, DateOnly date, List<ExpenseType> expenseTypes, CancellationToken ct)
+    {
+        var expenseType = expenseTypes.FirstOrDefault(t => t.Name == $"{ExpenseTypeNamePrefix} - {platform.Name}");
+        if (expenseType is null)
+        {
+            return;
+        }
+
+        var repo = _unitOfWork.Repository<Expense>();
+        foreach (var stale in await repo.ListAsync(e => e.BusinessId == businessId && e.ExpenseTypeId == expenseType.Id && e.ExpenseDate == date, ct))
+        {
+            repo.Remove(stale);
+        }
     }
 
     private async Task UpsertCommissionExpenseAsync(Guid businessId, ExpenseType expenseType, Platform platform, DateOnly date, decimal grossAmount, Guid postedByUserId, CancellationToken ct)

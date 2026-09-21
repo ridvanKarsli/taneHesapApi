@@ -44,4 +44,11 @@ public class BusinessesController : ControllerBase
         var userId = _currentUserService.UserId!.Value;
         return Ok(await _businessService.UpdateAsync(id, request, userId, ct));
     }
+
+    [HttpDelete("{id:guid}")]
+    public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
+    {
+        await _businessService.DeleteAsync(id, ct);
+        return NoContent();
+    }
 }

@@ -15,6 +15,9 @@ public interface IRecurringExpenseService
 
     Task<RecurringExpenseDto> UpdateAsync(Guid businessId, Guid id, UpdateRecurringExpenseRequest request, Guid updatedByUserId, CancellationToken ct = default);
 
+    /// <summary>Hiç ödeme kaydı olmayan düzenli gideri siler.</summary>
+    Task DeleteAsync(Guid businessId, Guid id, CancellationToken ct = default);
+
     /// <summary>Belirtilen dönemi ödendi olarak işaretler (yoksa oluşturur, varsa günceller).</summary>
     Task<RecurringExpenseDto> MarkPeriodPaidAsync(Guid businessId, Guid id, MarkPeriodPaidRequest request, Guid updatedByUserId, CancellationToken ct = default);
 

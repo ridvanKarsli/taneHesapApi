@@ -1,3 +1,4 @@
+using TaneHesap.Application.Common;
 using TaneHesap.Application.Common.Exceptions;
 using TaneHesap.Application.Common.Interfaces;
 using TaneHesap.Domain.Entities;
@@ -120,6 +121,17 @@ public class RecurringExpenseService : IRecurringExpenseService
         }
 
         return result;
+    }
+
+    public async Task DeleteAsync(Guid businessId, Guid id, CancellationToken ct = default)
+    {
+        var entity = await GetTenantScopedAsync(businessId, id, ct);
+        DeletionGuard.EnsureNotUsed(
+            await _unitOfWork.Repository<RecurringExpensePayment>().AnyAsync(p => p.RecurringExpenseId == id, ct),
+            "Bu düzenli gider", "ödeme geçmişinde");
+
+        _unitOfWork.Repository<RecurringExpense>().Remove(entity);
+        await _unitOfWork.SaveChangesAsync(ct);
     }
 
     private async Task<RecurringExpense> GetTenantScopedAsync(Guid businessId, Guid id, CancellationToken ct)

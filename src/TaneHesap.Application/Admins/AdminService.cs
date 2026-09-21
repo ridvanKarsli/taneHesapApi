@@ -38,6 +38,14 @@ public class AdminService : IAdminService
         return new AdminDto(result.UserId.Value, request.Username, request.FullName, true);
     }
 
+    public async Task DeleteAsync(Guid businessId, Guid adminId, CancellationToken ct = default)
+    {
+        if (!await _identityService.DeleteUserAsync(adminId, businessId, UserRole.Admin))
+        {
+            throw new NotFoundException("Admin", adminId);
+        }
+    }
+
     public async Task<AdminDto> UpdateAsync(Guid businessId, Guid adminId, UpdateAdminRequest request, CancellationToken ct = default)
     {
         var updated = await _identityService.UpdateUserAsync(

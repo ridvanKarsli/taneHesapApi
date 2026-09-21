@@ -49,4 +49,12 @@ public class ExpenseTypesController : ControllerBase
         var userId = _currentUserService.UserId!.Value;
         return Ok(await _expenseTypeService.UpdateAsync(BusinessId, id, request, userId, ct));
     }
+
+    [HttpDelete("{id:guid}")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
+    {
+        await _expenseTypeService.DeleteAsync(BusinessId, id, ct);
+        return NoContent();
+    }
 }

@@ -30,6 +30,9 @@ public class Repository<T> : IRepository<T> where T : BaseEntity
         return await query.ToListAsync(ct);
     }
 
+    public Task<bool> AnyAsync(Expression<Func<T, bool>> predicate, CancellationToken ct = default)
+        => _set.AnyAsync(predicate, ct);
+
     public async Task AddAsync(T entity, CancellationToken ct = default) => await _set.AddAsync(entity, ct);
 
     public void Update(T entity) => _set.Update(entity);

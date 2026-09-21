@@ -1,3 +1,4 @@
+using TaneHesap.Application.Common;
 using TaneHesap.Application.Common.Exceptions;
 using TaneHesap.Application.Common.Interfaces;
 using TaneHesap.Domain.Entities;
@@ -54,6 +55,16 @@ public class PlatformService : IPlatformService
         await _unitOfWork.SaveChangesAsync(ct);
 
         return ToDto(entity);
+    }
+
+    public async Task DeleteAsync(Guid businessId, Guid id, CancellationToken ct = default)
+    {
+        var entity = await GetTenantScopedAsync(businessId, id, ct);
+        DeletionGuard.EnsureNotUsed(
+            await _unitOfWork.Repository<DailySalesEntry>().AnyAsync(e => e.PlatformId == id, ct), "Bu platform", "gün sonu satışlarında");
+
+        _unitOfWork.Repository<Platform>().Remove(entity);
+        await _unitOfWork.SaveChangesAsync(ct);
     }
 
     private async Task<Platform> GetTenantScopedAsync(Guid businessId, Guid id, CancellationToken ct)

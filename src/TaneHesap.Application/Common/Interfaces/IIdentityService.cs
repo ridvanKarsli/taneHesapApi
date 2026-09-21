@@ -39,6 +39,12 @@ public interface IIdentityService
 
     Task<bool> SetActiveAsync(Guid userId, bool isActive);
 
+    /// <summary>
+    /// İşletmedeki verilen roldeki kullanıcıyı ve açık oturumlarını (refresh token) siler; eşleşmezse false.
+    /// Girdiği kayıtlar silinmez (CreatedByUserId ve denetim kayıtları geçmiş olarak kalır).
+    /// </summary>
+    Task<bool> DeleteUserAsync(Guid userId, Guid businessId, UserRole role);
+
     /// <summary>Kullanıcı adı/şifre doğrular; başarılıysa kullanıcı bilgisini döner.</summary>
     Task<ApplicationUserInfo?> ValidatePasswordAsync(string username, string password);
 

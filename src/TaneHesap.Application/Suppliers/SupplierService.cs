@@ -1,3 +1,4 @@
+using TaneHesap.Application.Common;
 using TaneHesap.Application.Common.Exceptions;
 using TaneHesap.Application.Common.Interfaces;
 using TaneHesap.Domain.Entities;
@@ -182,6 +183,16 @@ public class SupplierService : ISupplierService
         }
 
         return totalDebt;
+    }
+
+    public async Task DeleteAsync(Guid businessId, Guid id, CancellationToken ct = default)
+    {
+        var supplier = await GetTenantScopedSupplierAsync(businessId, id, ct);
+        DeletionGuard.EnsureNotUsed(
+            await _unitOfWork.Repository<SupplierPurchase>().AnyAsync(p => p.SupplierId == id, ct), "Bu tedarikçi", "alış kayıtlarında");
+
+        _unitOfWork.Repository<Supplier>().Remove(supplier);
+        await _unitOfWork.SaveChangesAsync(ct);
     }
 
     private async Task<Supplier> GetTenantScopedSupplierAsync(Guid businessId, Guid id, CancellationToken ct)

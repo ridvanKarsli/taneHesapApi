@@ -22,6 +22,14 @@ public record CreateExpenseRequest(
     PaymentMethod? PaymentMethod,
     string? Description);
 
+public record UpdateExpenseRequest(
+    Guid ExpenseTypeId,
+    decimal Amount,
+    decimal? Quantity,
+    DateOnly ExpenseDate,
+    PaymentMethod? PaymentMethod,
+    string? Description);
+
 /// <summary>
 /// Gider listesi için opsiyonel filtreler. <paramref name="CreatedByUserId"/> doluysa sadece o
 /// kullanıcının girdiği giderler döner — EMPLOYEE yalnızca kendi kayıtlarını görür (bkz. Proje Raporu bölüm 2).

@@ -30,6 +30,14 @@ public class EmployeeService : IEmployeeService
         return new EmployeeDto(result.UserId.Value, request.Username, request.FullName, true);
     }
 
+    public async Task DeleteAsync(Guid businessId, Guid employeeId, CancellationToken ct = default)
+    {
+        if (!await _identityService.DeleteUserAsync(employeeId, businessId, UserRole.Employee))
+        {
+            throw new NotFoundException("Employee", employeeId);
+        }
+    }
+
     public async Task<EmployeeDto> UpdateAsync(Guid businessId, Guid employeeId, UpdateEmployeeRequest request, CancellationToken ct = default)
     {
         var updated = await _identityService.UpdateUserAsync(

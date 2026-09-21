@@ -13,4 +13,7 @@ public interface IExpenseTypeService
     Task<ExpenseTypeDto> CreateAsync(Guid businessId, CreateExpenseTypeRequest request, Guid createdByUserId, CancellationToken ct = default);
 
     Task<ExpenseTypeDto> UpdateAsync(Guid businessId, Guid id, UpdateExpenseTypeRequest request, Guid updatedByUserId, CancellationToken ct = default);
+
+    /// <summary>Hiç gider girilmemiş türü siler; kullanılmışsa 409 (pasif yapılması önerilir).</summary>
+    Task DeleteAsync(Guid businessId, Guid id, CancellationToken ct = default);
 }

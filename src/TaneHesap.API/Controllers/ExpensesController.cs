@@ -30,8 +30,7 @@ public class ExpensesController : ControllerBase
         [FromQuery] DateOnly? fromDate, [FromQuery] DateOnly? toDate, [FromQuery] Guid? expenseTypeId, CancellationToken ct)
     {
         // EMPLOYEE sadece kendi girdiği giderleri görür; ADMIN işletmenin tümünü (bkz. Proje Raporu bölüm 2).
-        var onlyCreatedBy = _currentUserService.Role == UserRole.Employee ? _currentUserService.UserId : null;
-        var filter = new ExpenseListFilter(fromDate, toDate, expenseTypeId, onlyCreatedBy);
+        var filter = new ExpenseListFilter(fromDate, toDate, expenseTypeId, OnlyOwnForEmployee);
         return Ok(await _expenseService.GetListAsync(BusinessId, filter, ct));
     }
 
@@ -41,5 +40,19 @@ public class ExpensesController : ControllerBase
         var userId = _currentUserService.UserId!.Value;
         var created = await _expenseService.CreateAsync(BusinessId, request, userId, ct);
         return Ok(created);
+    }
+
+    /// <summary>EMPLOYEE yalnızca kendi girdiği gideri düzeltebilir/silebilir; ADMIN işletmenin tümünü.</summary>
+    private Guid? OnlyOwnForEmployee => _currentUserService.Role == UserRole.Employee ? _currentUserService.UserId : null;
+
+    [HttpPut("{id:guid}")]
+    public async Task<ActionResult<ExpenseDto>> Update(Guid id, [FromBody] UpdateExpenseRequest request, CancellationToken ct)
+        => Ok(await _expenseService.UpdateAsync(BusinessId, id, request, _currentUserService.UserId!.Value, OnlyOwnForEmployee, ct));
+
+    [HttpDelete("{id:guid}")]
+    public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
+    {
+        await _expenseService.DeleteAsync(BusinessId, id, OnlyOwnForEmployee, ct);
+        return NoContent();
     }
 }

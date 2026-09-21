@@ -2,6 +2,7 @@ using TaneHesap.Application.Common.Exceptions;
 using TaneHesap.Application.Common.Interfaces;
 using TaneHesap.Application.Notifications;
 using TaneHesap.Domain.Entities;
+using TaneHesap.Domain.Enums;
 
 namespace TaneHesap.Application.Stock;
 
@@ -66,6 +67,34 @@ public class StockMovementService : IStockMovementService
         }
 
         return ToDto(movement, ingredient);
+    }
+
+    public async Task DeleteAsync(Guid businessId, Guid id, Guid deletedByUserId, CancellationToken ct = default)
+    {
+        var repo = _unitOfWork.Repository<StockMovement>();
+        var movement = await repo.GetByIdAsync(id, ct);
+        if (movement is null || movement.BusinessId != businessId)
+        {
+            throw new NotFoundException(nameof(StockMovement), id);
+        }
+
+        if (movement.MovementType is not (StockMovementType.ManualAdjustment or StockMovementType.Waste))
+        {
+            throw new ConflictAppException("Alış ve satış tüketimi hareketleri buradan silinemez; tedarikçi alışı veya gün sonu kapanışı üzerinden düzeltilir.");
+        }
+
+        var ingredientRepo = _unitOfWork.Repository<Ingredient>();
+        var ingredient = await ingredientRepo.GetByIdAsync(movement.IngredientId, ct);
+        if (ingredient is not null)
+        {
+            ingredient.CurrentStockQuantity -= movement.QuantityChange;
+            ingredient.UpdatedByUserId = deletedByUserId;
+            ingredient.UpdatedAtUtc = DateTime.UtcNow;
+            ingredientRepo.Update(ingredient);
+        }
+
+        repo.Remove(movement);
+        await _unitOfWork.SaveChangesAsync(ct);
     }
 
     private static StockMovementDto ToDto(StockMovement m, Ingredient? ingredient) => new(
