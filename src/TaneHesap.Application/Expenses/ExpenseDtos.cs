@@ -22,5 +22,8 @@ public record CreateExpenseRequest(
     PaymentMethod? PaymentMethod,
     string? Description);
 
-/// <summary>Gider listesi için opsiyonel filtreler.</summary>
-public record ExpenseListFilter(DateOnly? FromDate, DateOnly? ToDate, Guid? ExpenseTypeId);
+/// <summary>
+/// Gider listesi için opsiyonel filtreler. <paramref name="CreatedByUserId"/> doluysa sadece o
+/// kullanıcının girdiği giderler döner — EMPLOYEE yalnızca kendi kayıtlarını görür (bkz. Proje Raporu bölüm 2).
+/// </summary>
+public record ExpenseListFilter(DateOnly? FromDate, DateOnly? ToDate, Guid? ExpenseTypeId, Guid? CreatedByUserId = null);

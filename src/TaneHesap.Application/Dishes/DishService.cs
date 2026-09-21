@@ -48,6 +48,22 @@ public class DishService : IDishService
         return await BuildDishDtoAsync(businessId, dish, ct);
     }
 
+    public async Task<DishDto> UpdateDishAsync(Guid businessId, Guid dishId, UpdateDishRequest request, Guid updatedByUserId, CancellationToken ct = default)
+    {
+        var dish = await GetTenantScopedDishAsync(businessId, dishId, ct);
+
+        dish.Name = request.Name;
+        dish.Description = request.Description;
+        dish.IsActive = request.IsActive;
+        dish.UpdatedByUserId = updatedByUserId;
+        dish.UpdatedAtUtc = DateTime.UtcNow;
+
+        _unitOfWork.Repository<Dish>().Update(dish);
+        await _unitOfWork.SaveChangesAsync(ct);
+
+        return await BuildDishDtoAsync(businessId, dish, ct);
+    }
+
     public async Task<DishSizeDto> AddSizeAsync(Guid businessId, Guid dishId, CreateDishSizeRequest request, Guid createdByUserId, CancellationToken ct = default)
     {
         var dish = await GetTenantScopedDishAsync(businessId, dishId, ct);

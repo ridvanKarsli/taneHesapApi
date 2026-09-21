@@ -12,10 +12,12 @@ namespace TaneHesap.API.Services;
 public class CurrentUserService : ICurrentUserService
 {
     private readonly IHttpContextAccessor _httpContextAccessor;
+    private readonly SystemExecutionScope _systemScope;
 
-    public CurrentUserService(IHttpContextAccessor httpContextAccessor)
+    public CurrentUserService(IHttpContextAccessor httpContextAccessor, SystemExecutionScope systemScope)
     {
         _httpContextAccessor = httpContextAccessor;
+        _systemScope = systemScope;
     }
 
     private ClaimsPrincipal? User => _httpContextAccessor.HttpContext?.User;
@@ -40,10 +42,16 @@ public class CurrentUserService : ICurrentUserService
         }
     }
 
+    /// <summary>Arka plan görevlerinde (bkz. <see cref="SystemExecutionScope"/>) sistem, SUPER_ADMIN gibi tüm işletmeleri görür.</summary>
     public UserRole? Role
     {
         get
         {
+            if (_systemScope.IsSystem)
+            {
+                return UserRole.SuperAdmin;
+            }
+
             var value = User?.FindFirstValue(ClaimTypes.Role);
             return Enum.TryParse<UserRole>(value, out var role) ? role : null;
         }

@@ -120,6 +120,10 @@ isterseniz:
 - Auth: login (tüm roller kullanıcı adı/şifre ile — authenticator/2FA zorunluluğu
   kaldırıldı, bkz. Proje Raporu bölüm 2, 7), refresh token (rotation), revoke.
 - Businesses: SUPER_ADMIN için CRUD.
+- Admins: SUPER_ADMIN bir işletmeye ADMIN (işletme sahibi) atar/düzenler.
+- Bildirim tetikleyicileri: düşük stok; gün sonu kapanışında gelir açığı veya fazla malzeme
+  tüketimi ("fire/açık" uyarısı); ödenmemiş düzenli giderler için periyodik hatırlatma.
+- Yetki: EMPLOYEE gider listesinde yalnızca kendi girdiği kayıtları görür.
 - Employees: ADMIN'in kendi işletmesine çalışan ekleme/güncelleme.
 - ExpenseTypes: ADMIN yönetir, EMPLOYEE listeler.
 - Expenses: ADMIN + EMPLOYEE girer/listeler.
@@ -202,6 +206,31 @@ sadece ilgili ADMIN'e "ReceiveNotification" mesajı gönderir. JWT, WebSocket/SS
 `?access_token=...` query string üzerinden de kabul edilir (tarayıcı bu bağlantılarda Authorization
 header'ı gönderemeyebilir). Bir alıcı o an bağlı değilse anlık iletim sessizce atlanır; bildirim
 veritabanında kalır ve `GET /api/notifications` ile her zaman okunabilir.
+
+## Yayına alma (Railway)
+
+Repo kökündeki `Dockerfile` ile Railway servisi doğrudan oluşturulur (Railway Dockerfile'ı
+otomatik algılar). Aynı projeye bir PostgreSQL eklentisi ekleyip API servisinde şu ortam
+değişkenlerini tanımlayın:
+
+| Değişken | Değer |
+|---|---|
+| `DATABASE_URL` | Railway PostgreSQL'in `DATABASE_URL` referansı — uygulama bunu Npgsql bağlantı dizesine çevirir (`Extensions/DatabaseUrl.cs`). |
+| `Jwt__Secret` | En az 32 karakterlik rastgele değer (`openssl rand -base64 48`). Üretimde varsayılan değerle uygulama açılmaz. |
+| `Cors__AllowedOrigins__0` | Frontend adresi, örn. `https://tanehesap.vercel.app` |
+| `Database__MigrateOnStartup` | `true` — bekleyen EF Core migration'ları açılışta uygulanır. |
+| `InitialSuperAdmin__Username` / `__Password` / `__FullName` | İlk kurulumda SUPER_ADMIN için; oluştuktan sonra silinebilir. |
+
+`PORT` Railway tarafından verilir ve `Program.cs` tarafından okunur; TLS Railway'de sonlanır
+(`UseForwardedHeaders` gerçek şemayı alır). SignalR için CORS politikası `AllowCredentials` içerir,
+bu yüzden `Cors__AllowedOrigins` mutlaka tam adres olmalıdır (`*` olamaz).
+
+## Arka plan görevleri
+
+`BackgroundJobs/RecurringExpenseReminderJob` açılıştan 1 dk sonra ve her 6 saatte bir, dönemi bitmiş
+ama ödenmemiş düzenli giderler için ADMIN'lere bildirim üretir (aynı dönem için tekrar göndermez).
+HTTP isteği olmadığı için kendi DI scope'unda `SystemExecutionScope.EnterSystemMode()` ile çalışır
+— tenant sorgu filtresi bu scope'ta tüm işletmeleri kapsar.
 
 ## Sonraki adımlar
 

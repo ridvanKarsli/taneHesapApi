@@ -1,3 +1,4 @@
+using System.Globalization;
 using TaneHesap.Application.Common.Exceptions;
 using TaneHesap.Application.Common.Interfaces;
 using TaneHesap.Application.DailySales;
@@ -128,7 +129,40 @@ public class DailyClosingService : IDailyClosingService
             }
         }
 
-        return await GenerateLossReportAsync(businessId, request.EntryDate, entry, ct);
+        var report = await GenerateLossReportAsync(businessId, request.EntryDate, entry, ct);
+        await WarnIfLossAsync(businessId, report, ct);
+        return report;
+    }
+
+    /// <summary>
+    /// Gün sonu raporunda gelir açığı veya fazladan malzeme tüketimi (fire/kayıp) varsa ADMIN'lere
+    /// in-app uyarı gönderir (bkz. Proje Raporu bölüm 3.10, 3.13 — "gün sonu fire/açık uyarısı").
+    /// </summary>
+    private async Task WarnIfLossAsync(Guid businessId, DailyLossReportDto report, CancellationToken ct)
+    {
+        var revenueShortfall = report.RevenueVarianceAmount < 0 ? -report.RevenueVarianceAmount : 0;
+        var excessMaterialCost = report.Items.Where(i => i.VarianceCost > 0).Sum(i => i.VarianceCost);
+        if (revenueShortfall == 0 && excessMaterialCost == 0)
+        {
+            return;
+        }
+
+        var tr = CultureInfo.GetCultureInfo("tr-TR");
+        var findings = new List<string>();
+        if (revenueShortfall > 0)
+        {
+            findings.Add($"gelir beklenenden {revenueShortfall.ToString("N2", tr)} ₺ eksik");
+        }
+        if (excessMaterialCost > 0)
+        {
+            findings.Add($"malzemede {excessMaterialCost.ToString("N2", tr)} ₺ tutarında fazla tüketim (fire/kayıp)");
+        }
+
+        await _notificationService.NotifyAdminsAsync(
+            businessId,
+            NotificationType.DailyLossWarning,
+            $"{report.ReportDate.ToString("dd.MM.yyyy", tr)} gün sonu: {string.Join("; ", findings)}.",
+            ct);
     }
 
     public async Task<DailyActualEntryDto?> GetActualEntryByDateAsync(Guid businessId, DateOnly date, CancellationToken ct = default)

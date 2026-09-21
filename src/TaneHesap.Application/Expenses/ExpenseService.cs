@@ -28,6 +28,9 @@ public class ExpenseService : IExpenseService
         if (filter.ExpenseTypeId.HasValue)
             query = query.Where(e => e.ExpenseTypeId == filter.ExpenseTypeId.Value);
 
+        if (filter.CreatedByUserId.HasValue)
+            query = query.Where(e => e.CreatedByUserId == filter.CreatedByUserId.Value);
+
         var expenseTypes = await _unitOfWork.Repository<ExpenseType>().ListAsync(t => t.BusinessId == businessId, ct);
         var expenseTypeNames = expenseTypes.ToDictionary(t => t.Id, t => t.Name);
 

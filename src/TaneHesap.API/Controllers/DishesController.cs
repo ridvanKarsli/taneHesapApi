@@ -42,6 +42,14 @@ public class DishesController : ControllerBase
         return CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
     }
 
+    [HttpPut("{id:guid}")]
+    [Authorize(Roles = "Admin")]
+    public async Task<ActionResult<DishDto>> Update(Guid id, [FromBody] UpdateDishRequest request, CancellationToken ct)
+    {
+        var userId = _currentUserService.UserId!.Value;
+        return Ok(await _dishService.UpdateDishAsync(BusinessId, id, request, userId, ct));
+    }
+
     [HttpPost("{dishId:guid}/sizes")]
     [Authorize(Roles = "Admin")]
     public async Task<ActionResult<DishSizeDto>> AddSize(Guid dishId, [FromBody] CreateDishSizeRequest request, CancellationToken ct)

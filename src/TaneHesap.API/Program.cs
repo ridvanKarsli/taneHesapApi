@@ -1,5 +1,8 @@
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi.Models;
+using TaneHesap.API.BackgroundJobs;
 using TaneHesap.API.Extensions;
 using TaneHesap.API.Hubs;
 using TaneHesap.API.Middleware;
@@ -11,11 +14,27 @@ using TaneHesap.Infrastructure.Persistence.Seed;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// --- Barındırma (Railway): PORT ortam değişkeni ve DATABASE_URL desteği (bkz. README "Yayına alma") ---
+var port = Environment.GetEnvironmentVariable("PORT");
+if (!string.IsNullOrWhiteSpace(port))
+{
+    builder.WebHost.UseUrls($"http://0.0.0.0:{port}");
+}
+
+DatabaseUrl.ApplyIfPresent(builder.Configuration);
+
+// Üretimde varsayılan (git'teki) JWT secret ile açılmayı engelle — token'lar sahte imzalanabilirdi.
+if (!builder.Environment.IsDevelopment() && (builder.Configuration["Jwt:Secret"] ?? "").Contains("CHANGE_ME"))
+{
+    throw new InvalidOperationException("Jwt:Secret üretim ortamında tanımlanmalı (ör. Jwt__Secret ortam değişkeni).");
+}
+
 // --- Servisler ---
 
 builder.Services.AddControllers();
 
 builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<SystemExecutionScope>();
 builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
 
 // SignalR: ADMIN'lere anlık in-app bildirim itmek için (bkz. Hubs/NotificationsHub,
@@ -27,6 +46,9 @@ builder.Services.AddScoped<IRealtimeNotifier, SignalRRealtimeNotifier>();
 builder.Services.AddApplicationServices();
 builder.Services.AddInfrastructure(builder.Configuration);
 
+// Düzenli gider hatırlatmalarını periyodik üreten arka plan görevi (bkz. BackgroundJobs/).
+builder.Services.AddHostedService<RecurringExpenseReminderJob>();
+
 // React frontend (Vercel'de barındırılacak) için CORS — geliştirmede localhost, üretimde
 // appsettings/ortam değişkeninden okunan origin. bkz. Proje Raporu bölüm 8.
 var corsOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
@@ -37,7 +59,10 @@ builder.Services.AddCors(options =>
     options.AddPolicy("Frontend", policy =>
         policy.WithOrigins(corsOrigins)
               .AllowAnyHeader()
-              .AllowAnyMethod());
+              .AllowAnyMethod()
+              // SignalR istemcisi negotiate isteğini kimlik bilgisiyle (withCredentials) gönderir;
+              // bu olmadan tarayıcı CORS'ta reddeder ve anlık bildirimler hiç bağlanmaz.
+              .AllowCredentials());
 });
 
 builder.Services.AddEndpointsApiExplorer();
@@ -66,6 +91,12 @@ var app = builder.Build();
 // --- Rolleri (SuperAdmin/Admin/Employee) uygulama açılışında garantiye al ---
 using (var scope = app.Services.CreateScope())
 {
+    // Üretimde (Railway) bekleyen EF Core migration'larını açılışta uygula — Database:MigrateOnStartup=true ile açılır.
+    if (app.Configuration.GetValue<bool>("Database:MigrateOnStartup"))
+    {
+        await scope.ServiceProvider.GetRequiredService<ApplicationDbContext>().Database.MigrateAsync();
+    }
+
     var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole<Guid>>>();
     foreach (var roleName in new[] { "SuperAdmin", "Admin", "Employee" })
     {
@@ -88,6 +119,15 @@ if (app.Environment.IsDevelopment())
     app.UseSwagger();
     app.UseSwaggerUI();
 }
+
+// Railway/Vercel gibi TLS'i önde sonlandıran proxy'lerin arkasında gerçek şema/IP'yi kullan.
+var forwardedHeaders = new ForwardedHeadersOptions
+{
+    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
+};
+forwardedHeaders.KnownIPNetworks.Clear();
+forwardedHeaders.KnownProxies.Clear();
+app.UseForwardedHeaders(forwardedHeaders);
 
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 

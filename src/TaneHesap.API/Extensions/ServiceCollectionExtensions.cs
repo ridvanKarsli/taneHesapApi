@@ -38,6 +38,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IStockMovementService, StockMovementService>();
         services.AddScoped<ISupplierService, SupplierService>();
         services.AddScoped<IRecurringExpenseService, RecurringExpenseService>();
+        services.AddScoped<IRecurringExpenseReminderService, RecurringExpenseReminderService>();
         services.AddScoped<INotificationService, NotificationService>();
         services.AddScoped<IPlatformService, PlatformService>();
         services.AddScoped<IPlatformCommissionExpensePoster, PlatformCommissionExpensePoster>();

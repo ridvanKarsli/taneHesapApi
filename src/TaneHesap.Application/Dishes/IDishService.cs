@@ -13,6 +13,8 @@ public interface IDishService
 
     Task<DishDto> CreateDishAsync(Guid businessId, CreateDishRequest request, Guid createdByUserId, CancellationToken ct = default);
 
+    Task<DishDto> UpdateDishAsync(Guid businessId, Guid dishId, UpdateDishRequest request, Guid updatedByUserId, CancellationToken ct = default);
+
     Task<DishSizeDto> AddSizeAsync(Guid businessId, Guid dishId, CreateDishSizeRequest request, Guid createdByUserId, CancellationToken ct = default);
 
     Task<DishSizeDto> UpdateSizeAsync(Guid businessId, Guid dishId, Guid sizeId, UpdateDishSizeRequest request, Guid updatedByUserId, CancellationToken ct = default);

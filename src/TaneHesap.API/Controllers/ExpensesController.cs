@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using TaneHesap.Application.Common.Interfaces;
 using TaneHesap.Application.Expenses;
+using TaneHesap.Domain.Enums;
 
 namespace TaneHesap.API.Controllers;
 
@@ -28,7 +29,9 @@ public class ExpensesController : ControllerBase
     public async Task<ActionResult<List<ExpenseDto>>> GetList(
         [FromQuery] DateOnly? fromDate, [FromQuery] DateOnly? toDate, [FromQuery] Guid? expenseTypeId, CancellationToken ct)
     {
-        var filter = new ExpenseListFilter(fromDate, toDate, expenseTypeId);
+        // EMPLOYEE sadece kendi girdiği giderleri görür; ADMIN işletmenin tümünü (bkz. Proje Raporu bölüm 2).
+        var onlyCreatedBy = _currentUserService.Role == UserRole.Employee ? _currentUserService.UserId : null;
+        var filter = new ExpenseListFilter(fromDate, toDate, expenseTypeId, onlyCreatedBy);
         return Ok(await _expenseService.GetListAsync(BusinessId, filter, ct));
     }
 

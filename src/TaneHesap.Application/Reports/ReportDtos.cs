@@ -4,6 +4,19 @@ namespace TaneHesap.Application.Reports;
 
 public record ExpenseCategoryTotalDto(ExpenseCategory Category, decimal Amount);
 
+/// <summary>
+/// Tabak (boy) bazlı dönemsel satış ve kârlılık (bkz. Proje Raporu bölüm 3.11). Maliyet, reçete ×
+/// malzemelerin GÜNCEL birim fiyatıyla hesaplanır — geçmiş fiyat geçmişi tutulmadığı için tahminidir.
+/// </summary>
+public record DishSalesTotalDto(
+    Guid DishSizeId,
+    string DishName,
+    string SizeName,
+    int Quantity,
+    decimal Revenue,
+    decimal EstimatedCost,
+    decimal EstimatedProfit);
+
 public record PlatformRevenueTotalDto(Guid PlatformId, string PlatformName, decimal GrossRevenue, decimal CommissionAmount, decimal NetRevenue);
 
 /// <summary>
@@ -21,4 +34,5 @@ public record PeriodReportDto(
     decimal TotalExpense,
     decimal NetProfit,
     List<ExpenseCategoryTotalDto> ExpenseByCategory,
-    List<PlatformRevenueTotalDto> RevenueByPlatform);
+    List<PlatformRevenueTotalDto> RevenueByPlatform,
+    List<DishSalesTotalDto> SalesByDish);

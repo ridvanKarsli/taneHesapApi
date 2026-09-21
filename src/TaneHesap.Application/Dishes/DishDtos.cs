@@ -15,6 +15,8 @@ public record DishDto(Guid Id, string Name, string? Description, bool IsActive, 
 
 public record CreateDishRequest(string Name, string? Description);
 
+public record UpdateDishRequest(string Name, string? Description, bool IsActive);
+
 public record RecipeItemRequest(Guid IngredientId, decimal Quantity);
 
 public record CreateDishSizeRequest(string Name, decimal SalePrice, List<RecipeItemRequest> RecipeItems);
