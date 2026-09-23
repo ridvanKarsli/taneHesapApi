@@ -23,5 +23,12 @@ public class Expense : BaseEntity, ITenantEntity
 
     public PaymentMethod? PaymentMethod { get; set; }
 
+    /// <summary>PaymentMethod = Card ise ödemenin yapıldığı kredi kartı (limitten düşer).</summary>
+    public Guid? PaymentCardId { get; set; }
+    public PaymentCard? PaymentCard { get; set; }
+
+    /// <summary>Gider türü Personnel kategorisindeyse ödemenin yapıldığı çalışan (cüzdanından düşer).</summary>
+    public Guid? EmployeeUserId { get; set; }
+
     public string? Description { get; set; }
 }

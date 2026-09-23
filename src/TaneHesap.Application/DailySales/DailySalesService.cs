@@ -1,6 +1,5 @@
 using TaneHesap.Application.Common.Exceptions;
 using TaneHesap.Application.Common.Interfaces;
-using TaneHesap.Application.Platforms;
 using TaneHesap.Domain.Entities;
 using TaneHesap.Domain.Enums;
 
@@ -9,12 +8,14 @@ namespace TaneHesap.Application.DailySales;
 public class DailySalesService : IDailySalesService
 {
     private readonly IUnitOfWork _unitOfWork;
-    private readonly IPlatformCommissionExpensePoster _commissionExpensePoster;
+    private readonly IExpectedConsumptionCalculator _consumptionCalculator;
+    private readonly IReadOnlyList<IDailySalesSideEffect> _sideEffects;
 
-    public DailySalesService(IUnitOfWork unitOfWork, IPlatformCommissionExpensePoster commissionExpensePoster)
+    public DailySalesService(IUnitOfWork unitOfWork, IExpectedConsumptionCalculator consumptionCalculator, IEnumerable<IDailySalesSideEffect> sideEffects)
     {
         _unitOfWork = unitOfWork;
-        _commissionExpensePoster = commissionExpensePoster;
+        _consumptionCalculator = consumptionCalculator;
+        _sideEffects = sideEffects.ToList();
     }
 
     public async Task<ImportDailySalesResult> ImportAsync(Guid businessId, ImportDailySalesRequest request, Guid importedByUserId, CancellationToken ct = default)
@@ -93,16 +94,7 @@ public class DailySalesService : IDailySalesService
 
         await _unitOfWork.SaveChangesAsync(ct);
 
-        // Paket servis (Platform) kanalından gelen satırların komisyonunu otomatik olarak Expense
-        // kaydına dönüştür (bkz. Proje Raporu bölüm 3.4). Ayrı bir servise devredilir; bu metot
-        // satış içe aktarımından, IPlatformCommissionExpensePoster komisyon/gider dönüşümünden
-        // sorumludur (Single Responsibility).
-        var affectedDates = validEntries
-            .Where(e => e.Channel == SalesChannel.Platform)
-            .Select(e => e.SaleDate)
-            .Distinct();
-
-        await _commissionExpensePoster.PostCommissionExpensesAsync(businessId, affectedDates, importedByUserId, ct);
+        await ApplySideEffectsAsync(businessId, validEntries.Select(e => e.SaleDate), importedByUserId, ct);
 
         return new ImportDailySalesResult(importLog.Id, request.Rows.Count, validEntries.Count, errors.Count, errors);
     }
@@ -118,7 +110,7 @@ public class DailySalesService : IDailySalesService
 
         repo.Remove(entry);
         await _unitOfWork.SaveChangesAsync(ct);
-        await _commissionExpensePoster.PostCommissionExpensesAsync(businessId, new[] { entry.SaleDate }, deletedByUserId, ct);
+        await ApplySideEffectsAsync(businessId, new[] { entry.SaleDate }, deletedByUserId, ct);
     }
 
     public async Task<int> DeleteByDateAsync(Guid businessId, DateOnly date, Guid deletedByUserId, CancellationToken ct = default)
@@ -131,8 +123,26 @@ public class DailySalesService : IDailySalesService
         }
 
         await _unitOfWork.SaveChangesAsync(ct);
-        await _commissionExpensePoster.PostCommissionExpensesAsync(businessId, new[] { date }, deletedByUserId, ct);
+        await ApplySideEffectsAsync(businessId, new[] { date }, deletedByUserId, ct);
         return entries.Count;
+    }
+
+    /// <summary>
+    /// Satış verisi değişen günler için türetilmiş kayıtları (platform komisyonu gideri, stok düşümü, kasa
+    /// geliri) yeniden hesaplatır — bu metot satıştan, her IDailySalesSideEffect kendi kuralından sorumludur.
+    /// </summary>
+    private async Task ApplySideEffectsAsync(Guid businessId, IEnumerable<DateOnly> dates, Guid userId, CancellationToken ct)
+    {
+        var distinctDates = dates.Distinct().ToList();
+        if (distinctDates.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var sideEffect in _sideEffects)
+        {
+            await sideEffect.ApplyAsync(businessId, distinctDates, userId, ct);
+        }
     }
 
     public async Task<List<DailySalesEntryDto>> GetByDateAsync(Guid businessId, DateOnly date, CancellationToken ct = default)
@@ -171,27 +181,10 @@ public class DailySalesService : IDailySalesService
 
         var expectedRevenue = entries.Sum(e => e.TotalAmount);
 
-        var recipeItems = await _unitOfWork.Repository<DishRecipeItem>().ListAsync(r => r.BusinessId == businessId, ct);
-        var recipeItemsByDishSize = recipeItems.GroupBy(r => r.DishSizeId).ToDictionary(g => g.Key, g => g.ToList());
-
         var ingredients = await _unitOfWork.Repository<Ingredient>().ListAsync(i => i.BusinessId == businessId, ct);
         var ingredientsById = ingredients.ToDictionary(i => i.Id);
 
-        var consumptionByIngredient = new Dictionary<Guid, decimal>();
-
-        foreach (var entry in entries)
-        {
-            if (!recipeItemsByDishSize.TryGetValue(entry.DishSizeId, out var items))
-            {
-                continue;
-            }
-
-            foreach (var item in items)
-            {
-                var qty = item.Quantity * entry.Quantity;
-                consumptionByIngredient[item.IngredientId] = consumptionByIngredient.GetValueOrDefault(item.IngredientId) + qty;
-            }
-        }
+        var consumptionByIngredient = await _consumptionCalculator.CalculateAsync(businessId, date, ct);
 
         var consumptionDtos = consumptionByIngredient
             .Select(kv => ingredientsById.TryGetValue(kv.Key, out var ing)

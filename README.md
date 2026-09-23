@@ -12,7 +12,7 @@ src/
                              Sadece Domain'e bağımlı; EF Core/Identity/JWT gibi altyapı paketlerine
                              bağımlı DEĞİL (composition root API katmanındadır).
   TaneHesap.Infrastructure  EF Core (PostgreSQL/Npgsql), ASP.NET Core Identity, JWT üretimi,
-                             repository/unit of work implementasyonları.
+                             TOTP (Otp.NET), repository/unit of work implementasyonları.
   TaneHesap.API              Controller'lar, Program.cs (DI kaydı, middleware), appsettings.
 ```
 
@@ -24,57 +24,16 @@ Bağımlılık yönü: `API → Infrastructure → Application → Domain` (Doma
 ile hatasız derleniyor** (Rıdvan'ın kendi makinesinde, .NET 10 SDK ile doğrulandı). Kod, geliştirme
 sürecinde NuGet.org erişiminin engellendiği bir sandbox ortamında yazıldı; bu yüzden `Domain` ve
 `Application` katmanları bilinçli olarak NuGet paketlerinden bağımsız tutuldu ve o ortamda sürekli
-derlenerek doğrulandı, `Infrastructure`/`API` katmanları ise (EF Core, Identity, JWT Bearer,
+derlenerek doğrulandı, `Infrastructure`/`API` katmanları ise (EF Core, Identity, JWT Bearer, Otp.NET,
 Swashbuckle paketlerine ihtiyaç duydukları için) ancak gerçek bir makinede doğrulanabildi — bu adım
 tamamlandı.
 
-## Kurulum (yerelde) — hızlı yol
-
-PostgreSQL kuruluysa (`brew install postgresql@16 && brew services start postgresql@16` veya
-Postgres.app), tek komutla veritabanı, bağlantı dizesi/JWT secret (`dotnet user-secrets` ile —
-appsettings.json'a gerçek değer yazılmaz), ilk migration ve ilk SUPER_ADMIN hazırlanır:
-
-```bash
-cd backend
-./scripts/setup-local.sh
-```
-
-Script idempotenttir (tekrar çalıştırmak güvenlidir — var olan veritabanını/migration'ı atlar).
-Varsayılanları ortam değişkenleriyle özelleştirebilirsiniz (bkz. script başındaki yorum):
-`PGHOST`, `PGPORT`, `PGUSER`, `PGPASSWORD`, `DB_NAME`, `SUPERADMIN_USERNAME`,
-`SUPERADMIN_PASSWORD`, `SUPERADMIN_FULLNAME`. `SUPERADMIN_PASSWORD` verilmezse script güvenli
-rastgele bir şifre üretip ekranda gösterir. Script bittiğinde şunu çalıştırıp API'yi başlatabilirsiniz:
-
-```bash
-dotnet run --project src/TaneHesap.API
-```
-
-Geliştirme ortamında Swagger UI `/swagger` altında açılır (varsayılan port: `5292` — bkz.
-`src/TaneHesap.API/Properties/launchSettings.json`; frontend'in `.env`'indeki
-`VITE_API_BASE_URL` bu portla eşleşmeli).
-
-**Not (bu depoyu hazırlayan ortamla ilgili):** `setup-local.sh`, veritabanı oluşturma ve
-`dotnet user-secrets` adımlarına kadar bu geliştirme sürecinde gerçek bir PostgreSQL'e karşı test
-edildi ve doğrulandı. `dotnet restore`/`dotnet ef migrations add` adımları ise NuGet.org
-erişiminin engellendiği bir sandbox ortamında test edilemedi (bkz. "Build durumu") — bu adımlar
-NuGet'e erişimi olan senin kendi makinende sorunsuz çalışmalı; ilk çalıştırmada script bu adımı
-tamamlayıp `Migrations/` altına gerçek migration dosyalarını üretecek, bunları git'e commit etmeyi
-unutma.
-
-## Kurulum (yerelde) — elle, adım adım
-
-Script'in ne yaptığını görmek ya da elle kontrol etmek isterseniz:
+## Kurulum (yerelde)
 
 1. **PostgreSQL** kurun/çalıştırın, bir veritabanı oluşturun (örn. `tanehesap`).
-2. Bağlantı dizesi ve JWT secret'ı **appsettings.json'a değil**, `dotnet user-secrets` ile tanımlayın
-   (Secret için en az 32 karakterlik rastgele bir değer kullanın):
-   ```bash
-   cd src/TaneHesap.API
-   dotnet user-secrets init   # ilk seferde UserSecretsId'yi csproj'a ekler
-   dotnet user-secrets set "ConnectionStrings:DefaultConnection" "Host=localhost;Port=5432;Database=tanehesap;Username=postgres;Password=..."
-   dotnet user-secrets set "Jwt:Secret" "$(openssl rand -base64 48)"
-   cd ../..
-   ```
+2. `src/TaneHesap.API/appsettings.json` içindeki `ConnectionStrings:DefaultConnection` ve
+   `Jwt:Secret` değerlerini güncelleyin (Secret için en az 32 karakterlik rastgele bir değer kullanın;
+   gerçek değerleri git'e commit etmeyin — bkz. `dotnet user-secrets` kullanımı).
 3. Paketleri geri yükleyin ve derleyin:
    ```bash
    dotnet restore
@@ -95,9 +54,7 @@ Script'in ne yaptığını görmek ya da elle kontrol etmek isterseniz:
 ## İlk SUPER_ADMIN kullanıcısını oluşturma
 
 Uygulama açılışında `SuperAdmin` / `Admin` / `Employee` rolleri otomatik oluşturulur. İlk
-SUPER_ADMIN de otomatik oluşturulabilir — ama güvenlik gereği kimlik bilgileri koda gömülmez.
-`setup-local.sh` bunu sizin için `dotnet user-secrets` ile tanımlar (bkz. yukarısı); elle yapmak
-isterseniz:
+SUPER_ADMIN de otomatik oluşturulabilir — ama güvenlik gereği kimlik bilgileri koda gömülmez:
 
 1. `dotnet user-secrets set "InitialSuperAdmin:Username" "ridvan"` ve
    `dotnet user-secrets set "InitialSuperAdmin:Password" "GucluBirSifre123!"` ile (yerelde) veya
@@ -108,22 +65,19 @@ isterseniz:
    açılışta sistemde hiç SUPER_ADMIN yoksa ve bu iki değer tanımlıysa otomatik olarak ilk
    SUPER_ADMIN'i oluşturur; zaten bir SUPER_ADMIN varsa veya değerler boşsa hiçbir şey yapmaz
    (idempotent — her açılışta güvenle çalışır, tekrar tekrar kullanıcı oluşturmaz).
-3. `POST /api/auth/login` — `Username`/`Password` ile giriş yapın (Swagger UI: `/swagger`).
-   **Not:** authenticator (2FA) zorunluluğu kaldırıldı (bkz. Proje Raporu bölüm 2, 7) — SUPER_ADMIN
-   dahil tüm roller sadece kullanıcı adı/şifre ile giriş yapar, ek bir kod gerekmez.
+3. İlk girişte TOTP kurulumu gerekir (`POST /api/auth/totp-setup` — bkz. AuthController); SUPER_ADMIN
+   ve ADMIN için 2FA zorunludur (bkz. bölüm 2).
 4. Güvenlik için ilk kurulumdan sonra `InitialSuperAdmin:Username/Password` değerlerini ortamdan
    kaldırmanız önerilir — seeder zaten bir SUPER_ADMIN varken hiçbir şey yapmaz, ama gereksiz yere
    bir şifrenin ortam değişkeninde durması iyi bir pratik değildir.
 
 ## Uygulanan modüller (Faz 1-3 — vertical slice)
 
-- Auth: login (tüm roller kullanıcı adı/şifre ile — authenticator/2FA zorunluluğu
-  kaldırıldı, bkz. Proje Raporu bölüm 2, 7), refresh token (rotation), revoke.
+- Gün sonu kapanışında gelir açığı veya fazla malzeme tüketimi varsa ADMIN'lere "fire/açık"
+  bildirimi gider; düzenli giderler için periyodik hatırlatma (bkz. "Arka plan görevleri").
+- Auth: login (SUPER_ADMIN/ADMIN için TOTP zorunlu, EMPLOYEE için yok), refresh token (rotation),
+  revoke, TOTP kurulumu.
 - Businesses: SUPER_ADMIN için CRUD.
-- Admins: SUPER_ADMIN bir işletmeye ADMIN (işletme sahibi) atar/düzenler.
-- Bildirim tetikleyicileri: düşük stok; gün sonu kapanışında gelir açığı veya fazla malzeme
-  tüketimi ("fire/açık" uyarısı); ödenmemiş düzenli giderler için periyodik hatırlatma.
-- Yetki: EMPLOYEE gider listesinde yalnızca kendi girdiği kayıtları görür.
 - Employees: ADMIN'in kendi işletmesine çalışan ekleme/güncelleme.
 - ExpenseTypes: ADMIN yönetir, EMPLOYEE listeler.
 - Expenses: ADMIN + EMPLOYEE girer/listeler.
@@ -207,21 +161,6 @@ sadece ilgili ADMIN'e "ReceiveNotification" mesajı gönderir. JWT, WebSocket/SS
 header'ı gönderemeyebilir). Bir alıcı o an bağlı değilse anlık iletim sessizce atlanır; bildirim
 veritabanında kalır ve `GET /api/notifications` ile her zaman okunabilir.
 
-## Silme kuralları
-
-Katalog kayıtları (gider türü, malzeme, ürün/boy, platform, tedarikçi, düzenli gider) **sadece geçmiş
-verilerde kullanılmadıysa** silinir; kullanıldıysa 409 ile "silmek yerine pasif yapın" mesajı döner —
-raporlar ve denetim kayıtları bozulmasın diye. Kontroller tek noktadan (`Application/Common/DeletionGuard`)
-yapılır; `UnitOfWork` ayrıca PostgreSQL yabancı anahtar ihlalini (23503) aynı anlaşılır 409'a çevirir
-(gözden kaçan bir ilişki için son güvenlik ağı).
-
-- Giderler: ADMIN hepsini, EMPLOYEE sadece kendi girdiklerini düzenler/siler.
-- Gün sonu satışları: tek satır veya bir günün tümü silinebilir (aynı dosya iki kez yüklendiyse);
-  o günün platform komisyonu gideri otomatik yeniden hesaplanır.
-- Stok hareketleri: sadece elle girilenler (sayım düzeltmesi/fire) silinir, stok geri alınır.
-- Çalışan/yönetici: hesap ve açık oturumları silinir; girdiği kayıtlar geçmiş olarak kalır.
-- İşletme: kullanıcısı ve verisi yoksa silinir; aksi halde pasif yapılır.
-
 ## Yayına alma (Railway)
 
 Repo kökündeki `Dockerfile` ile Railway servisi doğrudan oluşturulur (Railway Dockerfile'ı
@@ -240,11 +179,47 @@ değişkenlerini tanımlayın:
 (`UseForwardedHeaders` gerçek şemayı alır). SignalR için CORS politikası `AllowCredentials` içerir,
 bu yüzden `Cors__AllowedOrigins` mutlaka tam adres olmalıdır (`*` olamaz).
 
+## Kasa, kartlar ve çalışan cüzdanı (şema değişikliği — migration gerekir)
+
+- **Kasa (`Application/Treasury`, `/api/treasury`):** nakit kasası, kart kasası (banka) ve kredi kartları.
+  Tek doğruluk kaynağı `TreasuryTransaction` defteridir; bakiyeler toplamdan türetilir. Satış geliri
+  (`SalesTreasuryPoster`: nakit → nakit kasası, dükkan içi kart → kart kasası brüt + `Business.CardFeePercentage`
+  kesintisi ayrı `CardFee` satırı, platform kart ödemeleri kesintisiz) ve gider ödemeleri
+  (`ExpenseTreasuryPoster`: Cash → nakit, Bank → kart kasası, Card → kartın limiti) otomatik yazılır.
+  Transfer, kart borcu ödemesi ve düzeltme ADMIN tarafından elle girilir. Kart limiti `PaymentCard.Limit`
+  (elle değiştirilir), kullanılabilir limit = limit + Σ kart hareketleri.
+- **Gider ödeme şekli:** `PaymentMethod` enum'una `Bank = 2` eklendi; `Card` seçilince `PaymentCardId`
+  zorunlu. Gider türü kategorisi `Personnel` ise `EmployeeUserId` verilebilir (cüzdandan düşer).
+  `ExpenseCategory.FixedExpense` (1) **kaldırıldı** — sabit giderler Düzenli Giderler'de; eski satırlar
+  açılışta `LegacyDataFixups` ile `Other`'a taşınır (idempotent).
+- **Çalışan cüzdanı (`Application/Employees/EmployeeWalletService`):** `EmployeeProfile.HourlyWage`,
+  `EmployeeWorkLog` (saat × ücret = hak ediş), ödeme = Personel kategorisinde otomatik "Personel Ödemesi"
+  gider türüyle `Expense`. Bakiye = Σ hak ediş − Σ ödeme. EMPLOYEE `GET /api/me/wallet` ile sadece görür.
+- **Satıştan otomatik stok düşümü (`SalesStockConsumptionPoster`):** satış içe aktarımında reçeteye göre
+  `SaleConsumption` hareketi (gün bazında idempotent, `StockMovement.SourceDate`). Gün sonu kapanışında
+  yalnızca gerçek − beklenen **farkı** `Waste`/`ManualAdjustment` olarak işlenir.
+- **Aylık rapor (`Application/Reports/MonthlyReportService`, `GET /api/reports/monthly?year&month`):**
+  toplam gider ÷ satılan tabak = tabak başı genel maliyet; malzeme başına gelir (₺/birim) önceki aya göre
+  %10'dan fazla düşerse uyarı. `MonthlyReportJob` günde bir çalışır, biten ayı `MonthlyReport` kaydıyla
+  kapatır ve ADMIN'lere `MonthlyReport` bildirimi gönderir.
+- Satış verisi değişince çalışan türetilmiş kayıtlar `IDailySalesSideEffect` ile takılıdır
+  (komisyon gideri, stok düşümü, kasa geliri) — yeni kural = yeni sınıf + DI kaydı.
+
+Migration (Rıdvan'ın makinesinde, NuGet erişimi gerekir):
+
+```bash
+dotnet ef migrations add TreasuryWalletsMonthlyReport --project src/TaneHesap.Infrastructure --startup-project src/TaneHesap.API
+dotnet ef database update --project src/TaneHesap.Infrastructure --startup-project src/TaneHesap.API
+```
+
+Railway `Database__MigrateOnStartup=true` olduğu için `main`'e push sonrası üretimde otomatik uygulanır.
+
 ## Arka plan görevleri
 
 `BackgroundJobs/RecurringExpenseReminderJob` açılıştan 1 dk sonra ve her 6 saatte bir, dönemi bitmiş
 ama ödenmemiş düzenli giderler için ADMIN'lere bildirim üretir (aynı dönem için tekrar göndermez).
-HTTP isteği olmadığı için kendi DI scope'unda `SystemExecutionScope.EnterSystemMode()` ile çalışır
+`BackgroundJobs/MonthlyReportJob` açılıştan 2 dk sonra ve günde bir, biten ayın raporunu kapatıp bildirir.
+HTTP isteği olmadığı için kendi DI scope'unda `SystemExecutionScope.EnterSystemMode()` ile çalışırlar
 — tenant sorgu filtresi bu scope'ta tüm işletmeleri kapsar.
 
 ## Sonraki adımlar

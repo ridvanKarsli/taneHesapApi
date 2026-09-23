@@ -49,6 +49,11 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, IdentityR
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
     public DbSet<Notification> Notifications => Set<Notification>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
+    public DbSet<PaymentCard> PaymentCards => Set<PaymentCard>();
+    public DbSet<TreasuryTransaction> TreasuryTransactions => Set<TreasuryTransaction>();
+    public DbSet<EmployeeProfile> EmployeeProfiles => Set<EmployeeProfile>();
+    public DbSet<EmployeeWorkLog> EmployeeWorkLogs => Set<EmployeeWorkLog>();
+    public DbSet<MonthlyReport> MonthlyReports => Set<MonthlyReport>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -102,6 +107,20 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, IdentityR
         builder.Entity<RecurringExpensePayment>()
             .HasOne(x => x.RecurringExpense).WithMany(x => x.Payments)
             .HasForeignKey(x => x.RecurringExpenseId).OnDelete(DeleteBehavior.Cascade);
+
+        // Kart geçmişi olan gider/kasa hareketleri varken kart silinemez (bkz. TreasuryService.DeleteCardAsync).
+        builder.Entity<Expense>()
+            .HasOne(x => x.PaymentCard).WithMany()
+            .HasForeignKey(x => x.PaymentCardId).OnDelete(DeleteBehavior.Restrict);
+
+        builder.Entity<TreasuryTransaction>()
+            .HasOne(x => x.PaymentCard).WithMany()
+            .HasForeignKey(x => x.PaymentCardId).OnDelete(DeleteBehavior.Restrict);
+
+        builder.Entity<TreasuryTransaction>().HasIndex(x => new { x.BusinessId, x.TransactionDate });
+        builder.Entity<StockMovement>().HasIndex(x => new { x.BusinessId, x.SourceDate });
+        builder.Entity<EmployeeProfile>().HasIndex(x => new { x.BusinessId, x.UserId }).IsUnique();
+        builder.Entity<MonthlyReport>().HasIndex(x => new { x.BusinessId, x.Year, x.Month }).IsUnique();
 
         // Business ile ilişkili tüm entity'lerde varsayılan davranış Restrict (işletme yanlışlıkla
         // silinirse tüm veri de silinmesin diye) — her entity ayrı ayrı burada listelenmek yerine

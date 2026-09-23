@@ -1,27 +1,33 @@
 using TaneHesap.Application.Common.Interfaces;
+using TaneHesap.Application.DailySales;
+using TaneHesap.Application.Treasury;
 using TaneHesap.Domain.Entities;
 using TaneHesap.Domain.Enums;
 
 namespace TaneHesap.Application.Platforms;
 
 /// <summary>
-/// bkz. IPlatformCommissionExpensePoster. DailySalesService, gün sonu içe aktarımı tamamlandıktan
-/// sonra bu servisi çağırır; platform başına otomatik bir ExpenseType (get-or-create) ve
-/// tarih+platform başına bir Expense kaydı (idempotent: varsa tutarını günceller) oluşturur.
+/// Paket servis platformu (Yemeksepeti, Getir vb.) satışlarının komisyonunu otomatik bir Expense kaydına
+/// dönüştürür (bkz. Proje Raporu bölüm 3.4). Gün sonu satışı değişince <see cref="IDailySalesSideEffect"/>
+/// olarak çağrılır; platform başına otomatik bir ExpenseType (get-or-create) ve tarih+platform başına bir
+/// Expense kaydı (idempotent: varsa tutarını günceller, satış kalmadıysa siler) oluşturur. Komisyon platform
+/// hakedişinden kesildiği için ödeme şekli Bank'tır (kart kasasından düşer — bkz. IExpenseTreasuryPoster).
 /// </summary>
-public class PlatformCommissionExpensePoster : IPlatformCommissionExpensePoster
+public class PlatformCommissionExpensePoster : IDailySalesSideEffect
 {
     private const string ExpenseTypeNamePrefix = "Platform Komisyonu";
     private const string ExpenseTypeUnit = "TL";
 
     private readonly IUnitOfWork _unitOfWork;
+    private readonly IExpenseTreasuryPoster _treasuryPoster;
 
-    public PlatformCommissionExpensePoster(IUnitOfWork unitOfWork)
+    public PlatformCommissionExpensePoster(IUnitOfWork unitOfWork, IExpenseTreasuryPoster treasuryPoster)
     {
         _unitOfWork = unitOfWork;
+        _treasuryPoster = treasuryPoster;
     }
 
-    public async Task PostCommissionExpensesAsync(Guid businessId, IEnumerable<DateOnly> saleDates, Guid postedByUserId, CancellationToken ct = default)
+    public async Task ApplyAsync(Guid businessId, IReadOnlyCollection<DateOnly> saleDates, Guid postedByUserId, CancellationToken ct = default)
     {
         var distinctDates = saleDates.Distinct().ToList();
         if (distinctDates.Count == 0)
@@ -103,6 +109,7 @@ public class PlatformCommissionExpensePoster : IPlatformCommissionExpensePoster
         var repo = _unitOfWork.Repository<Expense>();
         foreach (var stale in await repo.ListAsync(e => e.BusinessId == businessId && e.ExpenseTypeId == expenseType.Id && e.ExpenseDate == date, ct))
         {
+            await _treasuryPoster.RemoveAsync(stale.Id, ct);
             repo.Remove(stale);
         }
     }
@@ -118,9 +125,11 @@ public class PlatformCommissionExpensePoster : IPlatformCommissionExpensePoster
         if (existingExpense is not null)
         {
             existingExpense.Amount = commissionAmount;
+            existingExpense.PaymentMethod = PaymentMethod.Bank;
             existingExpense.UpdatedByUserId = postedByUserId;
             existingExpense.UpdatedAtUtc = DateTime.UtcNow;
             _unitOfWork.Repository<Expense>().Update(existingExpense);
+            await _treasuryPoster.SyncAsync(existingExpense, ct);
             return;
         }
 
@@ -129,15 +138,18 @@ public class PlatformCommissionExpensePoster : IPlatformCommissionExpensePoster
             return;
         }
 
-        await _unitOfWork.Repository<Expense>().AddAsync(new Expense
+        var expense = new Expense
         {
             BusinessId = businessId,
             ExpenseTypeId = expenseType.Id,
             ExpenseType = expenseType,
             Amount = commissionAmount,
             ExpenseDate = date,
+            PaymentMethod = PaymentMethod.Bank,
             Description = $"{platform.Name} platform komisyonu (otomatik, gün sonu içe aktarımından hesaplandı).",
             CreatedByUserId = postedByUserId
-        }, ct);
+        };
+        await _unitOfWork.Repository<Expense>().AddAsync(expense, ct);
+        await _treasuryPoster.SyncAsync(expense, ct);
     }
 }

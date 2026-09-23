@@ -16,11 +16,13 @@ namespace TaneHesap.API.Controllers;
 public class ReportsController : ControllerBase
 {
     private readonly IReportService _reportService;
+    private readonly IMonthlyReportService _monthlyReportService;
     private readonly ICurrentUserService _currentUserService;
 
-    public ReportsController(IReportService reportService, ICurrentUserService currentUserService)
+    public ReportsController(IReportService reportService, IMonthlyReportService monthlyReportService, ICurrentUserService currentUserService)
     {
         _reportService = reportService;
+        _monthlyReportService = monthlyReportService;
         _currentUserService = currentUserService;
     }
 
@@ -29,4 +31,16 @@ public class ReportsController : ControllerBase
     [HttpGet("period")]
     public async Task<ActionResult<PeriodReportDto>> GetPeriodReport([FromQuery] DateOnly fromDate, [FromQuery] DateOnly toDate, CancellationToken ct)
         => Ok(await _reportService.GetPeriodReportAsync(BusinessId, fromDate, toDate, ct));
+
+    /// <summary>Aylık rapor: tabak başı genel maliyet ve malzeme verimliliği uyarıları (bkz. Proje Raporu bölüm 3.16).</summary>
+    [HttpGet("monthly")]
+    public async Task<ActionResult<MonthlyReportDto>> GetMonthlyReport([FromQuery] int year, [FromQuery] int month, CancellationToken ct)
+    {
+        if (month is < 1 or > 12 || year < 2000)
+        {
+            return BadRequest(new { error = "Geçerli bir yıl ve ay (1-12) girin." });
+        }
+
+        return Ok(await _monthlyReportService.GetAsync(BusinessId, year, month, ct));
+    }
 }

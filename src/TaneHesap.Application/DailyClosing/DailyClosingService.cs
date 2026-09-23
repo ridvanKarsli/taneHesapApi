@@ -87,6 +87,12 @@ public class DailyClosingService : IDailyClosingService
 
         await _unitOfWork.SaveChangesAsync(ct);
 
+        // Satılan ürünler reçeteye göre zaten otomatik düşüldü (SalesStockConsumptionPoster). Burada ADMIN'in
+        // saydığı gerçek tüketim ile beklenen arasındaki FARK işlenir: fazla giden = fire, eksik giden = düzeltme.
+        // Böylece toplam düşüm gerçek tüketime eşitlenir ve stok ADMIN'in girişiyle kesinleşir (bölüm 3.10).
+        var expectedByIngredient = await _dailySalesService.GetExpectedSummaryAsync(businessId, request.EntryDate, ct);
+        var expectedQuantities = expectedByIngredient.ExpectedConsumption.ToDictionary(e => e.IngredientId, e => e.ExpectedQuantity);
+
         var consumptionItemRepo = _unitOfWork.Repository<DailyActualConsumptionItem>();
         foreach (var item in request.ConsumptionItems)
         {
@@ -98,20 +104,30 @@ public class DailyClosingService : IDailyClosingService
                 CreatedByUserId = enteredByUserId
             }, ct);
 
+            var variance = item.ActualQuantityUsed - expectedQuantities.GetValueOrDefault(item.IngredientId);
+            if (variance == 0)
+            {
+                continue;
+            }
+
             var ingredient = ingredientsById[item.IngredientId];
             await stockMovementRepo.AddAsync(new StockMovement
             {
                 BusinessId = businessId,
                 IngredientId = item.IngredientId,
-                QuantityChange = -item.ActualQuantityUsed,
-                MovementType = StockMovementType.SaleConsumption,
+                QuantityChange = -variance,
+                MovementType = variance > 0 ? StockMovementType.Waste : StockMovementType.ManualAdjustment,
                 MovementDateUtc = DateTime.UtcNow,
                 SourceReferenceType = nameof(DailyActualEntry),
                 SourceReferenceId = entry.Id,
+                SourceDate = request.EntryDate,
+                Note = variance > 0
+                    ? $"Gün sonu sayımı: beklenenden {variance} {ingredient.Unit} fazla tüketim (fire/kayıp)"
+                    : $"Gün sonu sayımı: beklenenden {-variance} {ingredient.Unit} az tüketim (düzeltme)",
                 CreatedByUserId = enteredByUserId
             }, ct);
 
-            ingredient.CurrentStockQuantity -= item.ActualQuantityUsed;
+            ingredient.CurrentStockQuantity -= variance;
             ingredient.UpdatedByUserId = enteredByUserId;
             ingredient.UpdatedAtUtc = DateTime.UtcNow;
             ingredientRepo.Update(ingredient);

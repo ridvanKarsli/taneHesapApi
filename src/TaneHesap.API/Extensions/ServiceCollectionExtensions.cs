@@ -15,6 +15,7 @@ using TaneHesap.Application.RecurringExpenses;
 using TaneHesap.Application.Reports;
 using TaneHesap.Application.Stock;
 using TaneHesap.Application.Suppliers;
+using TaneHesap.Application.Treasury;
 
 namespace TaneHesap.API.Extensions;
 
@@ -33,6 +34,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IExpenseTypeService, ExpenseTypeService>();
         services.AddScoped<IExpenseService, ExpenseService>();
         services.AddScoped<IEmployeeService, EmployeeService>();
+        services.AddScoped<IEmployeeWalletService, EmployeeWalletService>();
         services.AddScoped<IIngredientService, IngredientService>();
         services.AddScoped<IDishService, DishService>();
         services.AddScoped<IStockMovementService, StockMovementService>();
@@ -41,10 +43,17 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IRecurringExpenseReminderService, RecurringExpenseReminderService>();
         services.AddScoped<INotificationService, NotificationService>();
         services.AddScoped<IPlatformService, PlatformService>();
-        services.AddScoped<IPlatformCommissionExpensePoster, PlatformCommissionExpensePoster>();
+        services.AddScoped<ITreasuryService, TreasuryService>();
+        services.AddScoped<IExpenseTreasuryPoster, ExpenseTreasuryPoster>();
+        services.AddScoped<IExpectedConsumptionCalculator, ExpectedConsumptionCalculator>();
+        // Satış verisi değişince yeniden hesaplanan türetilmiş kayıtlar — sırayla çağrılır (bkz. IDailySalesSideEffect).
+        services.AddScoped<IDailySalesSideEffect, PlatformCommissionExpensePoster>();
+        services.AddScoped<IDailySalesSideEffect, SalesStockConsumptionPoster>();
+        services.AddScoped<IDailySalesSideEffect, SalesTreasuryPoster>();
         services.AddScoped<IDailySalesService, DailySalesService>();
         services.AddScoped<IDailyClosingService, DailyClosingService>();
         services.AddScoped<IReportService, ReportService>();
+        services.AddScoped<IMonthlyReportService, MonthlyReportService>();
         services.AddScoped<IAuditLogService, AuditLogService>();
 
         return services;

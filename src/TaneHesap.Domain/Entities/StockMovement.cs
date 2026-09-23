@@ -26,5 +26,8 @@ public class StockMovement : BaseEntity, ITenantEntity
     public string? SourceReferenceType { get; set; }
     public Guid? SourceReferenceId { get; set; }
 
+    /// <summary>Hareketin ait olduğu iş günü (satış tüketimi / gün sonu kapanışı) — gün bazlı idempotent yeniden hesaplama ve aylık rapor için.</summary>
+    public DateOnly? SourceDate { get; set; }
+
     public string? Note { get; set; }
 }

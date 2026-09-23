@@ -48,6 +48,7 @@ builder.Services.AddInfrastructure(builder.Configuration);
 
 // Düzenli gider hatırlatmalarını periyodik üreten arka plan görevi (bkz. BackgroundJobs/).
 builder.Services.AddHostedService<RecurringExpenseReminderJob>();
+builder.Services.AddHostedService<MonthlyReportJob>();
 
 // React frontend (Vercel'de barındırılacak) için CORS — geliştirmede localhost, üretimde
 // appsettings/ortam değişkeninden okunan origin. bkz. Proje Raporu bölüm 8.
@@ -96,6 +97,9 @@ using (var scope = app.Services.CreateScope())
     {
         await scope.ServiceProvider.GetRequiredService<ApplicationDbContext>().Database.MigrateAsync();
     }
+
+    // Veri düzeyinde geriye dönük düzeltmeler (idempotent) — örn. kaldırılan "Sabit gider" kategorisi.
+    await LegacyDataFixups.ApplyAsync(scope.ServiceProvider.GetRequiredService<ApplicationDbContext>());
 
     var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole<Guid>>>();
     foreach (var roleName in new[] { "SuperAdmin", "Admin", "Employee" })
