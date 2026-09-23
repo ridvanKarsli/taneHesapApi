@@ -28,7 +28,15 @@ public record SupplierPurchaseDto(
 /// Yeni tedarikçi alışı. Kaydedilince: (1) ilgili malzemenin stoğuna Quantity kadar Purchase
 /// hareketi eklenir, (2) malzemenin CurrentUnitPrice değeri bu alışın UnitPrice'ı ile güncellenir.
 /// </summary>
-public record CreateSupplierPurchaseRequest(Guid IngredientId, decimal Quantity, decimal UnitPrice, DateOnly PurchaseDate);
+public record CreateSupplierPurchaseRequest(
+    Guid IngredientId,
+    decimal Quantity,
+    decimal UnitPrice,
+    DateOnly PurchaseDate,
+    /// <summary>Alış anında ödenen tutar (0 veya null → borç olarak kalır, sonra "Ödeme yap" ile kapatılır).</summary>
+    decimal? PaidAmount = null,
+    PaymentMethod? PaymentMethod = null,
+    Guid? PaymentCardId = null);
 
 /// <summary>
 /// Bir alışa karşılık (kısmi olabilen) ödeme kaydı. Toplam ödeme TotalAmount'a ulaşınca IsFullyPaid true olur.

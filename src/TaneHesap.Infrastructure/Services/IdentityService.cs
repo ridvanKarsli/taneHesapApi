@@ -155,6 +155,12 @@ public class IdentityService : IIdentityService
         return users.Select(ToInfo).ToList();
     }
 
+    public async Task<List<ApplicationUserInfo>> GetUsersByBusinessAsync(Guid businessId)
+    {
+        var users = await _userManager.Users.Where(u => u.BusinessId == businessId).ToListAsync();
+        return users.Select(ToInfo).ToList();
+    }
+
     public async Task<List<ApplicationUserInfo>> GetAdminsByBusinessAsync(Guid businessId)
     {
         var users = await _userManager.Users

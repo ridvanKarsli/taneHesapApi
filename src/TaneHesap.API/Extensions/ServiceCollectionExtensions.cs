@@ -1,3 +1,4 @@
+using TaneHesap.Application.Activity;
 using TaneHesap.Application.Admins;
 using TaneHesap.Application.AuditLogs;
 using TaneHesap.Application.Auth;
@@ -58,6 +59,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IReportService, ReportService>();
         services.AddScoped<IMonthlyReportService, MonthlyReportService>();
         services.AddScoped<IAuditLogService, AuditLogService>();
+        services.AddScoped<IActivityService, ActivityService>();
 
         return services;
     }

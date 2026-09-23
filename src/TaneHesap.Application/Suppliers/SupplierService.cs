@@ -138,6 +138,18 @@ public class SupplierService : ISupplierService
 
         await _unitOfWork.SaveChangesAsync(ct);
 
+        // Alış anında ödeme yapıldıysa aynı akıştan (kasa + otomatik gider) kaydedilir.
+        if (request.PaidAmount is > 0)
+        {
+            if (request.PaymentMethod is null)
+            {
+                throw new ValidationAppException("Alış anında ödeme için ödeme şekli seçilmeli.");
+            }
+
+            return await AddPaymentAsync(businessId, purchase.Id,
+                new CreateSupplierPaymentRequest(request.PaidAmount.Value, request.PurchaseDate, request.PaymentMethod.Value, request.PaymentCardId), createdByUserId, ct);
+        }
+
         return await BuildPurchaseDtoAsync(businessId, purchase, ct);
     }
 

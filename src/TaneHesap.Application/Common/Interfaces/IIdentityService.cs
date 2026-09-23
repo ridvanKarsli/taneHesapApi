@@ -52,6 +52,9 @@ public interface IIdentityService
 
     Task<List<ApplicationUserInfo>> GetEmployeesByBusinessAsync(Guid businessId);
 
+    /// <summary>İşletmedeki tüm kullanıcılar (ADMIN + EMPLOYEE, aktif/pasif) — işlem geçmişinde ad çözümleme ve filtre için.</summary>
+    Task<List<ApplicationUserInfo>> GetUsersByBusinessAsync(Guid businessId);
+
     /// <summary>Bir işletmenin AKTİF ADMIN kullanıcılarını döner — in-app bildirimler bunlara gönderilir.</summary>
     Task<List<ApplicationUserInfo>> GetAdminsByBusinessAsync(Guid businessId);
 
