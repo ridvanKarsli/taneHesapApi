@@ -1,4 +1,5 @@
 using TaneHesap.Domain.Common;
+using TaneHesap.Domain.Enums;
 
 namespace TaneHesap.Domain.Entities;
 
@@ -50,4 +51,8 @@ public class SupplierPayment : BaseEntity, ITenantEntity
 
     public decimal Amount { get; set; }
     public DateOnly PaymentDate { get; set; }
+
+    /// <summary>Ödemenin çıktığı kasa (bkz. bölüm 3.15); karşılığı otomatik bir Expense kaydıdır.</summary>
+    public PaymentMethod? PaymentMethod { get; set; }
+    public Guid? PaymentCardId { get; set; }
 }

@@ -1,5 +1,6 @@
 using TaneHesap.Application.Common.Exceptions;
 using TaneHesap.Application.Common.Interfaces;
+using TaneHesap.Application.ExpenseTypes;
 using TaneHesap.Application.Expenses;
 using TaneHesap.Domain.Entities;
 using TaneHesap.Domain.Enums;
@@ -13,12 +14,14 @@ public class EmployeeWalletService : IEmployeeWalletService
     private readonly IUnitOfWork _unitOfWork;
     private readonly IIdentityService _identityService;
     private readonly IExpenseService _expenseService;
+    private readonly IExpenseTypeCatalog _typeCatalog;
 
-    public EmployeeWalletService(IUnitOfWork unitOfWork, IIdentityService identityService, IExpenseService expenseService)
+    public EmployeeWalletService(IUnitOfWork unitOfWork, IIdentityService identityService, IExpenseService expenseService, IExpenseTypeCatalog typeCatalog)
     {
         _unitOfWork = unitOfWork;
         _identityService = identityService;
         _expenseService = expenseService;
+        _typeCatalog = typeCatalog;
     }
 
     public async Task<EmployeeWalletDto> GetWalletAsync(Guid businessId, Guid employeeUserId, CancellationToken ct = default)
@@ -91,42 +94,13 @@ public class EmployeeWalletService : IEmployeeWalletService
     public async Task<EmployeePaymentDto> PayAsync(Guid businessId, Guid employeeUserId, CreateEmployeePaymentRequest request, Guid userId, CancellationToken ct = default)
     {
         var employee = await GetEmployeeAsync(businessId, employeeUserId);
-        var expenseType = await GetOrCreatePaymentExpenseTypeAsync(businessId, userId, ct);
+        var expenseType = await _typeCatalog.GetOrCreateAsync(businessId, PaymentExpenseTypeName, ExpenseCategory.Personnel, userId, ct);
 
         var expense = await _expenseService.CreateAsync(businessId, new CreateExpenseRequest(
             expenseType.Id, request.Amount, null, request.Date, request.PaymentMethod, request.PaymentCardId, employeeUserId,
             request.Note ?? $"{employee.FullName} — personel ödemesi"), userId, ct);
 
         return new EmployeePaymentDto(expense.Id, expense.ExpenseDate, expense.Amount, expense.PaymentMethod, expense.PaymentCardName, expense.Description);
-    }
-
-    private async Task<ExpenseType> GetOrCreatePaymentExpenseTypeAsync(Guid businessId, Guid userId, CancellationToken ct)
-    {
-        var repo = _unitOfWork.Repository<ExpenseType>();
-        var existing = (await repo.ListAsync(t => t.BusinessId == businessId && t.Category == ExpenseCategory.Personnel && t.Name == PaymentExpenseTypeName, ct))
-            .FirstOrDefault();
-        if (existing is not null)
-        {
-            if (!existing.IsActive)
-            {
-                existing.IsActive = true;
-                repo.Update(existing);
-            }
-
-            return existing;
-        }
-
-        var created = new ExpenseType
-        {
-            BusinessId = businessId,
-            Name = PaymentExpenseTypeName,
-            Unit = "TL",
-            Category = ExpenseCategory.Personnel,
-            CreatedByUserId = userId
-        };
-        await repo.AddAsync(created, ct);
-        await _unitOfWork.SaveChangesAsync(ct);
-        return created;
     }
 
     private async Task<ApplicationUserInfo> GetEmployeeAsync(Guid businessId, Guid employeeUserId)

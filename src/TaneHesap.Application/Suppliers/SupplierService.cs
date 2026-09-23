@@ -1,6 +1,7 @@
 using TaneHesap.Application.Common;
 using TaneHesap.Application.Common.Exceptions;
 using TaneHesap.Application.Common.Interfaces;
+using TaneHesap.Application.Expenses;
 using TaneHesap.Domain.Entities;
 using TaneHesap.Domain.Enums;
 
@@ -8,11 +9,16 @@ namespace TaneHesap.Application.Suppliers;
 
 public class SupplierService : ISupplierService
 {
-    private readonly IUnitOfWork _unitOfWork;
+    public const string PaymentSourceType = "SupplierPayment";
+    private const string PaymentExpenseTypeName = "Tedarikçi Ödemesi";
 
-    public SupplierService(IUnitOfWork unitOfWork)
+    private readonly IUnitOfWork _unitOfWork;
+    private readonly IAutoExpenseWriter _autoExpenses;
+
+    public SupplierService(IUnitOfWork unitOfWork, IAutoExpenseWriter autoExpenses)
     {
         _unitOfWork = unitOfWork;
+        _autoExpenses = autoExpenses;
     }
 
     public async Task<List<SupplierDto>> GetAllAsync(Guid businessId, CancellationToken ct = default)
@@ -144,14 +150,31 @@ public class SupplierService : ISupplierService
             throw new NotFoundException(nameof(SupplierPurchase), purchaseId);
         }
 
-        await _unitOfWork.Repository<SupplierPayment>().AddAsync(new SupplierPayment
+        if (request.Amount <= 0)
+        {
+            throw new ValidationAppException("Ödeme tutarı 0'dan büyük olmalı.");
+        }
+
+        var payment = new SupplierPayment
         {
             BusinessId = businessId,
             SupplierPurchaseId = purchase.Id,
             Amount = request.Amount,
             PaymentDate = request.PaymentDate,
+            PaymentMethod = request.PaymentMethod,
+            PaymentCardId = request.PaymentCardId,
             CreatedByUserId = createdByUserId
-        }, ct);
+        };
+        await _unitOfWork.Repository<SupplierPayment>().AddAsync(payment, ct);
+
+        // Tedarikçiye ödenen para: kasadan/karttan düşen, raporlarda "Malzeme" görünen otomatik gider (bkz. 3.12, 3.15).
+        var supplier = await _unitOfWork.Repository<Supplier>().GetByIdAsync(purchase.SupplierId, ct);
+        var ingredient = await _unitOfWork.Repository<Ingredient>().GetByIdAsync(purchase.IngredientId, ct);
+        await _autoExpenses.UpsertAsync(new AutoExpenseSpec(
+            businessId, PaymentSourceType, payment.Id, PaymentExpenseTypeName, ExpenseCategory.Material,
+            request.Amount, request.PaymentDate, request.PaymentMethod, request.PaymentCardId,
+            $"{supplier?.Name ?? "Tedarikçi"} — {ingredient?.Name ?? "alış"} ({purchase.PurchaseDate:dd.MM.yyyy} alışı) ödemesi (otomatik)",
+            createdByUserId), ct);
 
         await _unitOfWork.SaveChangesAsync(ct);
 
@@ -229,7 +252,7 @@ public class SupplierService : ISupplierService
 
         var paymentDtos = payments
             .OrderBy(p => p.PaymentDate)
-            .Select(p => new SupplierPaymentDto(p.Id, p.Amount, p.PaymentDate))
+            .Select(p => new SupplierPaymentDto(p.Id, p.Amount, p.PaymentDate, p.PaymentMethod))
             .ToList();
 
         return new SupplierPurchaseDto(

@@ -31,4 +31,15 @@ public class Expense : BaseEntity, ITenantEntity
     public Guid? EmployeeUserId { get; set; }
 
     public string? Description { get; set; }
+
+    /// <summary>
+    /// Sistem tarafından otomatik üretilen giderlerde kaynak (örn. "PlatformCommission", "CardFee",
+    /// "RecurringExpensePayment", "SupplierPayment") ve kaynak Id'si — kaynak başına tek kayıt (idempotent).
+    /// Otomatik giderler Giderler ekranından değil, kaynak modülünden yönetilir. bkz. IAutoExpenseWriter.
+    /// </summary>
+    public string? SourceReferenceType { get; set; }
+    public Guid? SourceReferenceId { get; set; }
+
+    /// <summary>Otomatik (kaynağa bağlı) gider mi.</summary>
+    public bool IsAutomatic => SourceReferenceType is not null;
 }

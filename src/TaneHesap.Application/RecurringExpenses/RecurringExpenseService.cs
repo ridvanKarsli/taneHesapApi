@@ -1,6 +1,7 @@
 using TaneHesap.Application.Common;
 using TaneHesap.Application.Common.Exceptions;
 using TaneHesap.Application.Common.Interfaces;
+using TaneHesap.Application.Expenses;
 using TaneHesap.Domain.Entities;
 using TaneHesap.Domain.Enums;
 
@@ -8,11 +9,16 @@ namespace TaneHesap.Application.RecurringExpenses;
 
 public class RecurringExpenseService : IRecurringExpenseService
 {
-    private readonly IUnitOfWork _unitOfWork;
+    public const string PaymentSourceType = "RecurringExpensePayment";
+    private const string PaymentExpenseTypeName = "Düzenli Gider";
 
-    public RecurringExpenseService(IUnitOfWork unitOfWork)
+    private readonly IUnitOfWork _unitOfWork;
+    private readonly IAutoExpenseWriter _autoExpenses;
+
+    public RecurringExpenseService(IUnitOfWork unitOfWork, IAutoExpenseWriter autoExpenses)
     {
         _unitOfWork = unitOfWork;
+        _autoExpenses = autoExpenses;
     }
 
     public async Task<List<RecurringExpenseDto>> GetAllAsync(Guid businessId, CancellationToken ct = default)
@@ -86,6 +92,8 @@ public class RecurringExpenseService : IRecurringExpenseService
                 IsPaid = true,
                 PaidDate = request.PaidDate,
                 PaidAmount = request.PaidAmount,
+                PaymentMethod = request.PaymentMethod,
+                PaymentCardId = request.PaymentCardId,
                 CreatedByUserId = updatedByUserId
             };
             await paymentRepo.AddAsync(payment, ct);
@@ -95,10 +103,19 @@ public class RecurringExpenseService : IRecurringExpenseService
             payment.IsPaid = true;
             payment.PaidDate = request.PaidDate;
             payment.PaidAmount = request.PaidAmount;
+            payment.PaymentMethod = request.PaymentMethod;
+            payment.PaymentCardId = request.PaymentCardId;
             payment.UpdatedByUserId = updatedByUserId;
             payment.UpdatedAtUtc = DateTime.UtcNow;
             paymentRepo.Update(payment);
         }
+
+        // Ödeme, kasadan/karttan düşen ve raporlara giren otomatik bir gider olarak da kaydedilir (dönem başına tek kayıt).
+        await _autoExpenses.UpsertAsync(new AutoExpenseSpec(
+            businessId, PaymentSourceType, payment.Id, PaymentExpenseTypeName, ExpenseCategory.Other,
+            request.PaidAmount, request.PaidDate, request.PaymentMethod, request.PaymentCardId,
+            $"{entity.Name} — {request.PeriodStartDate:dd.MM.yyyy}–{request.PeriodEndDate:dd.MM.yyyy} dönemi (otomatik)",
+            updatedByUserId), ct);
 
         await _unitOfWork.SaveChangesAsync(ct);
 

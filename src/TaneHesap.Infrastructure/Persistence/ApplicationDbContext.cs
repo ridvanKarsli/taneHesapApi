@@ -118,6 +118,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, IdentityR
             .HasForeignKey(x => x.PaymentCardId).OnDelete(DeleteBehavior.Restrict);
 
         builder.Entity<TreasuryTransaction>().HasIndex(x => new { x.BusinessId, x.TransactionDate });
+        builder.Entity<Expense>().HasIndex(x => new { x.BusinessId, x.SourceReferenceType, x.SourceReferenceId });
         builder.Entity<StockMovement>().HasIndex(x => new { x.BusinessId, x.SourceDate });
         builder.Entity<EmployeeProfile>().HasIndex(x => new { x.BusinessId, x.UserId }).IsUnique();
         builder.Entity<MonthlyReport>().HasIndex(x => new { x.BusinessId, x.Year, x.Month }).IsUnique();

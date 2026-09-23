@@ -40,4 +40,8 @@ public class RecurringExpensePayment : BaseEntity, ITenantEntity
     public bool IsPaid { get; set; }
     public DateOnly? PaidDate { get; set; }
     public decimal? PaidAmount { get; set; }
+
+    /// <summary>Ödemenin çıktığı kasa (bkz. bölüm 3.15); karşılığı otomatik bir Expense kaydıdır.</summary>
+    public PaymentMethod? PaymentMethod { get; set; }
+    public Guid? PaymentCardId { get; set; }
 }

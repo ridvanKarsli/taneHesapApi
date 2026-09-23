@@ -78,8 +78,6 @@ public enum TreasuryTransactionKind
 {
     /// <summary>Gün sonu satışlarından gelen gelir (nakit → nakit kasası, kart → kart kasası).</summary>
     SalesRevenue = 0,
-    /// <summary>Kart satışlarından bankanın kestiği komisyon (Business.CardFeePercentage).</summary>
-    CardFee = 1,
     /// <summary>Bir gider kaydının ödemesi.</summary>
     Expense = 2,
     /// <summary>Nakit ↔ kart kasası arası transfer.</summary>

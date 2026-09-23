@@ -33,6 +33,8 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IAdminService, AdminService>();
         services.AddScoped<IExpenseTypeService, ExpenseTypeService>();
         services.AddScoped<IExpenseService, ExpenseService>();
+        services.AddScoped<IExpenseTypeCatalog, ExpenseTypeCatalog>();
+        services.AddScoped<IAutoExpenseWriter, AutoExpenseWriter>();
         services.AddScoped<IEmployeeService, EmployeeService>();
         services.AddScoped<IEmployeeWalletService, EmployeeWalletService>();
         services.AddScoped<IIngredientService, IngredientService>();
@@ -50,6 +52,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IDailySalesSideEffect, PlatformCommissionExpensePoster>();
         services.AddScoped<IDailySalesSideEffect, SalesStockConsumptionPoster>();
         services.AddScoped<IDailySalesSideEffect, SalesTreasuryPoster>();
+        services.AddScoped<IDailySalesSideEffect, CardFeeExpensePoster>();
         services.AddScoped<IDailySalesService, DailySalesService>();
         services.AddScoped<IDailyClosingService, DailyClosingService>();
         services.AddScoped<IReportService, ReportService>();

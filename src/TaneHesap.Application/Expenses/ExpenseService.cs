@@ -172,6 +172,11 @@ public class ExpenseService : IExpenseService
             throw new NotFoundException(nameof(Expense), id);
         }
 
+        if (expense.IsAutomatic)
+        {
+            throw new ConflictAppException("Bu gider sistem tarafından otomatik oluşturuldu (satış, düzenli gider veya tedarikçi ödemesinden). Kaynağındaki kaydı düzenleyin; burada değiştirilemez.");
+        }
+
         return expense;
     }
 
@@ -196,6 +201,6 @@ public class ExpenseService : IExpenseService
             e.Amount, e.Quantity, e.ExpenseDate, e.PaymentMethod,
             e.PaymentCardId, e.PaymentCardId.HasValue ? lookups.CardNames.GetValueOrDefault(e.PaymentCardId.Value) : null,
             e.EmployeeUserId, e.EmployeeUserId.HasValue ? lookups.EmployeeNames.GetValueOrDefault(e.EmployeeUserId.Value) : null,
-            e.Description, e.CreatedByUserId, e.CreatedAtUtc);
+            e.Description, e.SourceReferenceType, e.CreatedByUserId, e.CreatedAtUtc);
     }
 }

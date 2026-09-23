@@ -183,9 +183,14 @@ bu yüzden `Cors__AllowedOrigins` mutlaka tam adres olmalıdır (`*` olamaz).
 
 - **Kasa (`Application/Treasury`, `/api/treasury`):** nakit kasası, kart kasası (banka) ve kredi kartları.
   Tek doğruluk kaynağı `TreasuryTransaction` defteridir; bakiyeler toplamdan türetilir. Satış geliri
-  (`SalesTreasuryPoster`: nakit → nakit kasası, dükkan içi kart → kart kasası brüt + `Business.CardFeePercentage`
-  kesintisi ayrı `CardFee` satırı, platform kart ödemeleri kesintisiz) ve gider ödemeleri
+  (`SalesTreasuryPoster`: nakit → nakit kasası, kart → kart kasası brüt) ve gider ödemeleri
   (`ExpenseTreasuryPoster`: Cash → nakit, Bank → kart kasası, Card → kartın limiti) otomatik yazılır.
+- **Her para çıkışı bir `Expense`'tir (`IAutoExpenseWriter`):** platform komisyonu, dükkan içi kart satışlarının
+  banka komisyonu (`CardFeeExpensePoster`, `Business.CardFeePercentage`), düzenli gider dönem ödemesi ve
+  tedarikçi ödemesi otomatik gider olarak yazılır (`Expense.SourceReferenceType/Id` ile kaynak başına tek kayıt,
+  idempotent). Böylece raporlar, tabak başı maliyet ve kasa aynı kanaldan beslenir; otomatik giderler Giderler
+  ekranından düzenlenemez/silinemez (kaynağından yönetilir). `MarkPeriodPaidRequest` ve
+  `CreateSupplierPaymentRequest` artık `PaymentMethod` + `PaymentCardId` alır.
   Transfer, kart borcu ödemesi ve düzeltme ADMIN tarafından elle girilir. Kart limiti `PaymentCard.Limit`
   (elle değiştirilir), kullanılabilir limit = limit + Σ kart hareketleri.
 - **Gider ödeme şekli:** `PaymentMethod` enum'una `Bank = 2` eklendi; `Card` seçilince `PaymentCardId`
