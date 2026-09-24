@@ -24,6 +24,11 @@ public record DailySalesEntryDto(
 /// ayrıştırması (ör. ClosedXML ile) API katmanında bu şablon netleşince eklenecek ve aynı
 /// ImportDailySalesRequest'i üretecek şekilde bağlanacaktır.
 /// </summary>
+/// <remarks>
+/// <c>TotalAmount</c> müşteriden tahsil edilen NET tutardır (indirim düşülmüş); <c>DiscountAmount</c> yalnızca
+/// bilgi amaçlıdır — gelir, kasa ve komisyon hesapları TotalAmount üzerinden yapılır. Arayüz, fiyat × adet − indirim'i
+/// otomatik önerir. bkz. Proje Raporu bölüm 3.5.
+/// </remarks>
 public record ImportRowRequest(
     DateOnly SaleDate,
     TimeOnly? SaleTime,

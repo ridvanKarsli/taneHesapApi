@@ -50,6 +50,12 @@ public class MonthlyReportService : IMonthlyReportService
 
     public async Task<int> CloseFinishedMonthsAsync(DateOnly today, CancellationToken ct = default)
     {
+        // Ayın son gününün satışları/kapanışı ertesi gün girilebilir; ay, en erken ayın 2'sinde kapatılır.
+        if (today.Day < 2)
+        {
+            return 0;
+        }
+
         var lastFinished = new DateOnly(today.Year, today.Month, 1).AddMonths(-1);
         var businesses = await _unitOfWork.Repository<Business>().ListAsync(b => b.IsActive, ct);
         var closedCount = 0;

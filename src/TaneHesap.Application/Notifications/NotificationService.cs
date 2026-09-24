@@ -86,12 +86,19 @@ public class NotificationService : INotificationService
         }
     }
 
-    public Task NotifyLowStockAsync(Guid businessId, string ingredientName, decimal currentQuantity, decimal threshold, CancellationToken ct = default)
-        => NotifyAdminsAsync(
-            businessId,
-            NotificationType.LowStock,
-            $"'{ingredientName}' malzemesi düşük stokta: mevcut {currentQuantity}, eşik {threshold}.",
-            ct);
+    public async Task NotifyLowStockAsync(Guid businessId, string ingredientName, decimal currentQuantity, decimal threshold, CancellationToken ct = default)
+    {
+        // Aynı malzeme için okunmamış bir düşük stok uyarısı zaten varsa tekrar üretme (her satış girişinde bildirim yağmasın).
+        var prefix = $"'{ingredientName}' malzemesi düşük stokta";
+        var alreadyPending = await _unitOfWork.Repository<Notification>()
+            .AnyAsync(n => n.BusinessId == businessId && n.Type == NotificationType.LowStock && !n.IsRead && n.Message.StartsWith(prefix), ct);
+        if (alreadyPending)
+        {
+            return;
+        }
+
+        await NotifyAdminsAsync(businessId, NotificationType.LowStock, $"{prefix}: mevcut {currentQuantity}, eşik {threshold}.", ct);
+    }
 
     private static NotificationDto ToDto(Notification n) => new(n.Id, n.Type, n.Message, n.IsRead, n.CreatedAtUtc);
 }

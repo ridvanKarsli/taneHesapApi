@@ -54,6 +54,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IDailySalesSideEffect, SalesStockConsumptionPoster>();
         services.AddScoped<IDailySalesSideEffect, SalesTreasuryPoster>();
         services.AddScoped<IDailySalesSideEffect, CardFeeExpensePoster>();
+        services.AddScoped<IDailySalesSideEffect, DailyClosingRecalculationSideEffect>(); // stok düşümünden SONRA çalışmalı
         services.AddScoped<IDailySalesService, DailySalesService>();
         services.AddScoped<IDailyClosingService, DailyClosingService>();
         services.AddScoped<IReportService, ReportService>();

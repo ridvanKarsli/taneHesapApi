@@ -8,197 +8,71 @@ using TaneHesap.Domain.Enums;
 
 namespace TaneHesap.Application.DailyClosing;
 
+/// <summary>
+/// Gün sonu kapanışı. Satılan ürünler reçeteye göre zaten otomatik düşülür (SalesStockConsumptionPoster);
+/// burada ADMIN'in saydığı gerçek tüketim ile beklenen arasındaki FARK fire/düzeltme hareketi olarak işlenir,
+/// gerçek gelir ile beklenen gelir farkı nakit kasasına sayım farkı olarak yazılır ve fire raporu üretilir.
+/// Tüm türetilmiş kayıtlar gün bazında idempotenttir: <see cref="RecalculateAsync"/> aynı günün satışı
+/// sonradan değişse bile (DailyClosingRecalculationSideEffect) tutarlılığı korur. bkz. Proje Raporu bölüm 3.10.
+/// </summary>
 public class DailyClosingService : IDailyClosingService
 {
+    public const string VarianceSourceType = "DailyClosingVariance";
+
+    private static readonly CultureInfo Tr = CultureInfo.GetCultureInfo("tr-TR");
+
     private readonly IUnitOfWork _unitOfWork;
-    private readonly IDailySalesService _dailySalesService;
+    private readonly IExpectedConsumptionCalculator _consumptionCalculator;
     private readonly INotificationService _notificationService;
 
-    public DailyClosingService(IUnitOfWork unitOfWork, IDailySalesService dailySalesService, INotificationService notificationService)
+    public DailyClosingService(IUnitOfWork unitOfWork, IExpectedConsumptionCalculator consumptionCalculator, INotificationService notificationService)
     {
         _unitOfWork = unitOfWork;
-        _dailySalesService = dailySalesService;
+        _consumptionCalculator = consumptionCalculator;
         _notificationService = notificationService;
     }
 
     public async Task<DailyLossReportDto> SubmitActualEntryAsync(Guid businessId, SubmitDailyActualEntryRequest request, Guid enteredByUserId, CancellationToken ct = default)
     {
-        var ingredientRepo = _unitOfWork.Repository<Ingredient>();
-        var ingredients = await ingredientRepo.ListAsync(i => i.BusinessId == businessId, ct);
-        var ingredientsById = ingredients.ToDictionary(i => i.Id);
-
-        foreach (var item in request.ConsumptionItems)
+        if (request.ActualRevenue < 0 || request.ConsumptionItems.Any(i => i.ActualQuantityUsed < 0))
         {
-            if (!ingredientsById.ContainsKey(item.IngredientId))
-            {
-                throw new NotFoundException(nameof(Ingredient), item.IngredientId);
-            }
+            throw new ValidationAppException("Gerçek gelir ve tüketim miktarları negatif olamaz.");
         }
 
-        var entryRepo = _unitOfWork.Repository<DailyActualEntry>();
-        var existingEntries = await entryRepo.ListAsync(e => e.BusinessId == businessId && e.EntryDate == request.EntryDate, ct);
-        var entry = existingEntries.FirstOrDefault();
-
-        var stockMovementRepo = _unitOfWork.Repository<StockMovement>();
-
-        if (entry is not null)
+        var ingredientIds = (await _unitOfWork.Repository<Ingredient>().ListAsync(i => i.BusinessId == businessId, ct)).Select(i => i.Id).ToHashSet();
+        var missing = request.ConsumptionItems.FirstOrDefault(i => !ingredientIds.Contains(i.IngredientId));
+        if (missing is not null)
         {
-            // Yeniden gönderim: önce bu girişe bağlı önceki stok düşümlerini geri al.
-            var previousMovements = await stockMovementRepo
-                .ListAsync(m => m.SourceReferenceType == nameof(DailyActualEntry) && m.SourceReferenceId == entry.Id, ct);
-
-            foreach (var movement in previousMovements)
-            {
-                if (ingredientsById.TryGetValue(movement.IngredientId, out var ing))
-                {
-                    ing.CurrentStockQuantity -= movement.QuantityChange; // QuantityChange negatifti, çıkarınca geri eklenir.
-                    ingredientRepo.Update(ing);
-                }
-
-                stockMovementRepo.Remove(movement);
-            }
-
-            var itemRepo = _unitOfWork.Repository<DailyActualConsumptionItem>();
-            var previousItems = await itemRepo.ListAsync(i => i.DailyActualEntryId == entry.Id, ct);
-            foreach (var item in previousItems)
-            {
-                itemRepo.Remove(item);
-            }
-
-            entry.ActualRevenue = request.ActualRevenue;
-            entry.Note = request.Note;
-            entry.UpdatedByUserId = enteredByUserId;
-            entry.UpdatedAtUtc = DateTime.UtcNow;
-            entryRepo.Update(entry);
-        }
-        else
-        {
-            entry = new DailyActualEntry
-            {
-                BusinessId = businessId,
-                EntryDate = request.EntryDate,
-                ActualRevenue = request.ActualRevenue,
-                EnteredByUserId = enteredByUserId,
-                Note = request.Note,
-                CreatedByUserId = enteredByUserId
-            };
-            await entryRepo.AddAsync(entry, ct);
+            throw new NotFoundException(nameof(Ingredient), missing.IngredientId);
         }
 
-        await _unitOfWork.SaveChangesAsync(ct);
-
-        // Satılan ürünler reçeteye göre zaten otomatik düşüldü (SalesStockConsumptionPoster). Burada ADMIN'in
-        // saydığı gerçek tüketim ile beklenen arasındaki FARK işlenir: fazla giden = fire, eksik giden = düzeltme.
-        // Böylece toplam düşüm gerçek tüketime eşitlenir ve stok ADMIN'in girişiyle kesinleşir (bölüm 3.10).
-        var expectedByIngredient = await _dailySalesService.GetExpectedSummaryAsync(businessId, request.EntryDate, ct);
-        var expectedQuantities = expectedByIngredient.ExpectedConsumption.ToDictionary(e => e.IngredientId, e => e.ExpectedQuantity);
-
-        var consumptionItemRepo = _unitOfWork.Repository<DailyActualConsumptionItem>();
-        foreach (var item in request.ConsumptionItems)
-        {
-            await consumptionItemRepo.AddAsync(new DailyActualConsumptionItem
-            {
-                DailyActualEntryId = entry.Id,
-                IngredientId = item.IngredientId,
-                ActualQuantityUsed = item.ActualQuantityUsed,
-                CreatedByUserId = enteredByUserId
-            }, ct);
-
-            var variance = item.ActualQuantityUsed - expectedQuantities.GetValueOrDefault(item.IngredientId);
-            if (variance == 0)
-            {
-                continue;
-            }
-
-            var ingredient = ingredientsById[item.IngredientId];
-            await stockMovementRepo.AddAsync(new StockMovement
-            {
-                BusinessId = businessId,
-                IngredientId = item.IngredientId,
-                QuantityChange = -variance,
-                MovementType = variance > 0 ? StockMovementType.Waste : StockMovementType.ManualAdjustment,
-                MovementDateUtc = DateTime.UtcNow,
-                SourceReferenceType = nameof(DailyActualEntry),
-                SourceReferenceId = entry.Id,
-                SourceDate = request.EntryDate,
-                Note = variance > 0
-                    ? $"Gün sonu sayımı: beklenenden {variance} {ingredient.Unit} fazla tüketim (fire/kayıp)"
-                    : $"Gün sonu sayımı: beklenenden {-variance} {ingredient.Unit} az tüketim (düzeltme)",
-                CreatedByUserId = enteredByUserId
-            }, ct);
-
-            ingredient.CurrentStockQuantity -= variance;
-            ingredient.UpdatedByUserId = enteredByUserId;
-            ingredient.UpdatedAtUtc = DateTime.UtcNow;
-            ingredientRepo.Update(ingredient);
-        }
-
-        await _unitOfWork.SaveChangesAsync(ct);
-
-        foreach (var item in request.ConsumptionItems)
-        {
-            var ingredient = ingredientsById[item.IngredientId];
-            if (ingredient.IsActive && ingredient.CurrentStockQuantity <= ingredient.MinimumStockThreshold)
-            {
-                await _notificationService.NotifyLowStockAsync(
-                    businessId, ingredient.Name, ingredient.CurrentStockQuantity, ingredient.MinimumStockThreshold, ct);
-            }
-        }
-
-        var report = await GenerateLossReportAsync(businessId, request.EntryDate, entry, ct);
+        var entry = await UpsertEntryAsync(businessId, request, enteredByUserId, ct);
+        var report = await RecalculateEntryAsync(entry, enteredByUserId, ct);
         await WarnIfLossAsync(businessId, report, ct);
         return report;
     }
 
-    /// <summary>
-    /// Gün sonu raporunda gelir açığı veya fazladan malzeme tüketimi (fire/kayıp) varsa ADMIN'lere
-    /// in-app uyarı gönderir (bkz. Proje Raporu bölüm 3.10, 3.13 — "gün sonu fire/açık uyarısı").
-    /// </summary>
-    private async Task WarnIfLossAsync(Guid businessId, DailyLossReportDto report, CancellationToken ct)
+    public async Task<bool> RecalculateAsync(Guid businessId, DateOnly date, Guid userId, CancellationToken ct = default)
     {
-        var revenueShortfall = report.RevenueVarianceAmount < 0 ? -report.RevenueVarianceAmount : 0;
-        var excessMaterialCost = report.Items.Where(i => i.VarianceCost > 0).Sum(i => i.VarianceCost);
-        if (revenueShortfall == 0 && excessMaterialCost == 0)
+        var entry = (await _unitOfWork.Repository<DailyActualEntry>().ListAsync(e => e.BusinessId == businessId && e.EntryDate == date, ct)).FirstOrDefault();
+        if (entry is null)
         {
-            return;
+            return false;
         }
 
-        var tr = CultureInfo.GetCultureInfo("tr-TR");
-        var findings = new List<string>();
-        if (revenueShortfall > 0)
-        {
-            findings.Add($"gelir beklenenden {revenueShortfall.ToString("N2", tr)} ₺ eksik");
-        }
-        if (excessMaterialCost > 0)
-        {
-            findings.Add($"malzemede {excessMaterialCost.ToString("N2", tr)} ₺ tutarında fazla tüketim (fire/kayıp)");
-        }
-
-        await _notificationService.NotifyAdminsAsync(
-            businessId,
-            NotificationType.DailyLossWarning,
-            $"{report.ReportDate.ToString("dd.MM.yyyy", tr)} gün sonu: {string.Join("; ", findings)}.",
-            ct);
+        await RecalculateEntryAsync(entry, userId, ct);
+        return true;
     }
 
     public async Task<DailyActualEntryDto?> GetActualEntryByDateAsync(Guid businessId, DateOnly date, CancellationToken ct = default)
     {
-        var entries = await _unitOfWork.Repository<DailyActualEntry>()
-            .ListAsync(e => e.BusinessId == businessId && e.EntryDate == date, ct);
-        var entry = entries.FirstOrDefault();
-        if (entry is null)
-        {
-            return null;
-        }
-
-        return await BuildActualEntryDtoAsync(businessId, entry, ct);
+        var entry = (await _unitOfWork.Repository<DailyActualEntry>().ListAsync(e => e.BusinessId == businessId && e.EntryDate == date, ct)).FirstOrDefault();
+        return entry is null ? null : await BuildActualEntryDtoAsync(businessId, entry, ct);
     }
 
     public async Task<DailyLossReportDto?> GetLossReportByDateAsync(Guid businessId, DateOnly date, CancellationToken ct = default)
     {
-        var reports = await _unitOfWork.Repository<DailyLossReport>()
-            .ListAsync(r => r.BusinessId == businessId && r.ReportDate == date, ct);
-        var report = reports.FirstOrDefault();
+        var report = (await _unitOfWork.Repository<DailyLossReport>().ListAsync(r => r.BusinessId == businessId && r.ReportDate == date, ct)).FirstOrDefault();
         return report is null ? null : await BuildLossReportDtoAsync(report, ct);
     }
 
@@ -216,91 +90,238 @@ public class DailyClosingService : IDailyClosingService
         return result;
     }
 
-    private async Task<DailyLossReportDto> GenerateLossReportAsync(Guid businessId, DateOnly date, DailyActualEntry entry, CancellationToken ct)
+    // ---- Giriş kaydı ----
+
+    private async Task<DailyActualEntry> UpsertEntryAsync(Guid businessId, SubmitDailyActualEntryRequest request, Guid userId, CancellationToken ct)
     {
-        var expected = await _dailySalesService.GetExpectedSummaryAsync(businessId, date, ct);
+        var entryRepo = _unitOfWork.Repository<DailyActualEntry>();
+        var itemRepo = _unitOfWork.Repository<DailyActualConsumptionItem>();
+        var entry = (await entryRepo.ListAsync(e => e.BusinessId == businessId && e.EntryDate == request.EntryDate, ct)).FirstOrDefault();
 
-        var actualItemRepo = _unitOfWork.Repository<DailyActualConsumptionItem>();
-        var actualItems = await actualItemRepo.ListAsync(i => i.DailyActualEntryId == entry.Id, ct);
-        var actualByIngredient = actualItems.ToDictionary(i => i.IngredientId, i => i.ActualQuantityUsed);
-
-        var ingredients = await _unitOfWork.Repository<Ingredient>().ListAsync(i => i.BusinessId == businessId, ct);
-        var ingredientsById = ingredients.ToDictionary(i => i.Id);
-
-        var allIngredientIds = expected.ExpectedConsumption.Select(e => e.IngredientId)
-            .Union(actualByIngredient.Keys)
-            .Distinct();
-
-        var reportRepo = _unitOfWork.Repository<DailyLossReport>();
-        var existingReports = await reportRepo.ListAsync(r => r.BusinessId == businessId && r.ReportDate == date, ct);
-        var report = existingReports.FirstOrDefault();
-
-        var itemRepo = _unitOfWork.Repository<DailyLossReportItem>();
-
-        if (report is not null)
+        if (entry is null)
         {
-            var oldItems = await itemRepo.ListAsync(i => i.DailyLossReportId == report.Id, ct);
-            foreach (var oldItem in oldItems)
-            {
-                itemRepo.Remove(oldItem);
-            }
-
-            report.ExpectedRevenue = expected.ExpectedRevenue;
-            report.ActualRevenue = entry.ActualRevenue;
-            report.RevenueVarianceAmount = entry.ActualRevenue - expected.ExpectedRevenue;
-            report.GeneratedAtUtc = DateTime.UtcNow;
-            report.UpdatedByUserId = entry.EnteredByUserId;
-            report.UpdatedAtUtc = DateTime.UtcNow;
-            reportRepo.Update(report);
+            entry = new DailyActualEntry { BusinessId = businessId, EntryDate = request.EntryDate, EnteredByUserId = userId, CreatedByUserId = userId };
+            await entryRepo.AddAsync(entry, ct);
         }
         else
         {
-            report = new DailyLossReport
+            foreach (var old in await itemRepo.ListAsync(i => i.DailyActualEntryId == entry.Id, ct))
             {
-                BusinessId = businessId,
-                ReportDate = date,
-                ExpectedRevenue = expected.ExpectedRevenue,
-                ActualRevenue = entry.ActualRevenue,
-                RevenueVarianceAmount = entry.ActualRevenue - expected.ExpectedRevenue,
-                GeneratedAtUtc = DateTime.UtcNow,
-                CreatedByUserId = entry.EnteredByUserId
-            };
-            await reportRepo.AddAsync(report, ct);
+                itemRepo.Remove(old);
+            }
+
+            entry.UpdatedByUserId = userId;
+            entry.UpdatedAtUtc = DateTime.UtcNow;
+            entryRepo.Update(entry);
+        }
+
+        entry.ActualRevenue = request.ActualRevenue;
+        entry.Note = request.Note;
+        await _unitOfWork.SaveChangesAsync(ct);
+
+        foreach (var item in request.ConsumptionItems.GroupBy(i => i.IngredientId))
+        {
+            await itemRepo.AddAsync(new DailyActualConsumptionItem
+            {
+                DailyActualEntryId = entry.Id,
+                IngredientId = item.Key,
+                ActualQuantityUsed = item.Sum(i => i.ActualQuantityUsed),
+                CreatedByUserId = userId
+            }, ct);
         }
 
         await _unitOfWork.SaveChangesAsync(ct);
+        return entry;
+    }
 
-        var expectedByIngredient = expected.ExpectedConsumption.ToDictionary(e => e.IngredientId, e => e.ExpectedQuantity);
+    // ---- Türetilmiş kayıtlar (idempotent) ----
 
-        foreach (var ingredientId in allIngredientIds)
+    private async Task<DailyLossReportDto> RecalculateEntryAsync(DailyActualEntry entry, Guid userId, CancellationToken ct)
+    {
+        var expectedConsumption = await _consumptionCalculator.CalculateAsync(entry.BusinessId, entry.EntryDate, ct);
+        var expectedRevenue = (await _unitOfWork.Repository<DailySalesEntry>()
+            .ListAsync(s => s.BusinessId == entry.BusinessId && s.SaleDate == entry.EntryDate, ct)).Sum(s => s.TotalAmount);
+        var actualItems = await _unitOfWork.Repository<DailyActualConsumptionItem>().ListAsync(i => i.DailyActualEntryId == entry.Id, ct);
+        var ingredientsById = (await _unitOfWork.Repository<Ingredient>().ListAsync(i => i.BusinessId == entry.BusinessId, ct)).ToDictionary(i => i.Id);
+
+        await ApplyStockVarianceAsync(entry, actualItems, expectedConsumption, ingredientsById, userId, ct);
+        await ApplyRevenueVarianceAsync(entry, expectedRevenue, userId, ct);
+        var report = await UpsertLossReportAsync(entry, expectedRevenue, actualItems, expectedConsumption, ingredientsById, userId, ct);
+
+        await NotifyLowStockAsync(entry.BusinessId, actualItems.Select(i => i.IngredientId), ingredientsById, ct);
+        return await BuildLossReportDtoAsync(report, ct);
+    }
+
+    /// <summary>Gerçek − beklenen tüketim farkını stoktan düşer/geri ekler; önceki fark hareketleri geri alınır.</summary>
+    private async Task ApplyStockVarianceAsync(DailyActualEntry entry, List<DailyActualConsumptionItem> actualItems,
+        Dictionary<Guid, decimal> expected, Dictionary<Guid, Ingredient> ingredientsById, Guid userId, CancellationToken ct)
+    {
+        var movementRepo = _unitOfWork.Repository<StockMovement>();
+        var ingredientRepo = _unitOfWork.Repository<Ingredient>();
+
+        foreach (var stale in await movementRepo.ListAsync(m => m.SourceReferenceType == nameof(DailyActualEntry) && m.SourceReferenceId == entry.Id, ct))
         {
-            var expectedQty = expectedByIngredient.GetValueOrDefault(ingredientId);
-            var actualQty = actualByIngredient.GetValueOrDefault(ingredientId);
-            var varianceQty = actualQty - expectedQty;
-            var unitPrice = ingredientsById.TryGetValue(ingredientId, out var ing) ? ing.CurrentUnitPrice : 0;
+            if (ingredientsById.TryGetValue(stale.IngredientId, out var ing))
+            {
+                ing.CurrentStockQuantity -= stale.QuantityChange;
+                ingredientRepo.Update(ing);
+            }
 
+            movementRepo.Remove(stale);
+        }
+
+        foreach (var item in actualItems)
+        {
+            var variance = item.ActualQuantityUsed - expected.GetValueOrDefault(item.IngredientId);
+            if (variance == 0 || !ingredientsById.TryGetValue(item.IngredientId, out var ingredient))
+            {
+                continue;
+            }
+
+            await movementRepo.AddAsync(new StockMovement
+            {
+                BusinessId = entry.BusinessId,
+                IngredientId = item.IngredientId,
+                QuantityChange = -variance,
+                MovementType = variance > 0 ? StockMovementType.Waste : StockMovementType.ManualAdjustment,
+                MovementDateUtc = DateTime.UtcNow,
+                SourceReferenceType = nameof(DailyActualEntry),
+                SourceReferenceId = entry.Id,
+                SourceDate = entry.EntryDate,
+                Note = variance > 0
+                    ? $"Gün sonu sayımı: beklenenden {variance} {ingredient.Unit} fazla tüketim (fire/kayıp)"
+                    : $"Gün sonu sayımı: beklenenden {-variance} {ingredient.Unit} az tüketim (düzeltme)",
+                CreatedByUserId = userId
+            }, ct);
+
+            ingredient.CurrentStockQuantity -= variance;
+            ingredient.UpdatedByUserId = userId;
+            ingredient.UpdatedAtUtc = DateTime.UtcNow;
+            ingredientRepo.Update(ingredient);
+        }
+
+        await _unitOfWork.SaveChangesAsync(ct);
+    }
+
+    /// <summary>
+    /// Satış geliri kasaya satış satırlarından yazılır; sayımda gerçek gelir farklıysa fark nakit kasasına
+    /// "sayım farkı" olarak işlenir — kasa gerçeği göstersin, açık raporda görünsün (gün başına tek kayıt).
+    /// </summary>
+    private async Task ApplyRevenueVarianceAsync(DailyActualEntry entry, decimal expectedRevenue, Guid userId, CancellationToken ct)
+    {
+        var repo = _unitOfWork.Repository<TreasuryTransaction>();
+        foreach (var stale in await repo.ListAsync(t => t.SourceReferenceType == VarianceSourceType && t.SourceReferenceId == entry.Id, ct))
+        {
+            repo.Remove(stale);
+        }
+
+        var variance = entry.ActualRevenue - expectedRevenue;
+        if (variance != 0)
+        {
+            await repo.AddAsync(new TreasuryTransaction
+            {
+                BusinessId = entry.BusinessId,
+                Account = TreasuryAccount.Cash,
+                Amount = variance,
+                Kind = TreasuryTransactionKind.ManualAdjustment,
+                TransactionDate = entry.EntryDate,
+                Description = variance < 0 ? "Gün sonu sayımı: kasa açığı" : "Gün sonu sayımı: kasa fazlası",
+                SourceReferenceType = VarianceSourceType,
+                SourceReferenceId = entry.Id,
+                CreatedByUserId = userId
+            }, ct);
+        }
+
+        await _unitOfWork.SaveChangesAsync(ct);
+    }
+
+    private async Task<DailyLossReport> UpsertLossReportAsync(DailyActualEntry entry, decimal expectedRevenue, List<DailyActualConsumptionItem> actualItems,
+        Dictionary<Guid, decimal> expected, Dictionary<Guid, Ingredient> ingredientsById, Guid userId, CancellationToken ct)
+    {
+        var reportRepo = _unitOfWork.Repository<DailyLossReport>();
+        var itemRepo = _unitOfWork.Repository<DailyLossReportItem>();
+        var report = (await reportRepo.ListAsync(r => r.BusinessId == entry.BusinessId && r.ReportDate == entry.EntryDate, ct)).FirstOrDefault();
+
+        if (report is null)
+        {
+            report = new DailyLossReport { BusinessId = entry.BusinessId, ReportDate = entry.EntryDate, CreatedByUserId = userId };
+            await reportRepo.AddAsync(report, ct);
+        }
+        else
+        {
+            foreach (var old in await itemRepo.ListAsync(i => i.DailyLossReportId == report.Id, ct))
+            {
+                itemRepo.Remove(old);
+            }
+
+            report.UpdatedByUserId = userId;
+            report.UpdatedAtUtc = DateTime.UtcNow;
+            reportRepo.Update(report);
+        }
+
+        report.ExpectedRevenue = expectedRevenue;
+        report.ActualRevenue = entry.ActualRevenue;
+        report.RevenueVarianceAmount = entry.ActualRevenue - expectedRevenue;
+        report.GeneratedAtUtc = DateTime.UtcNow;
+        await _unitOfWork.SaveChangesAsync(ct);
+
+        var actualByIngredient = actualItems.ToDictionary(i => i.IngredientId, i => i.ActualQuantityUsed);
+        foreach (var ingredientId in expected.Keys.Union(actualByIngredient.Keys))
+        {
+            var expectedQty = expected.GetValueOrDefault(ingredientId);
+            var actualQty = actualByIngredient.GetValueOrDefault(ingredientId);
+            var unitPrice = ingredientsById.TryGetValue(ingredientId, out var ing) ? ing.CurrentUnitPrice : 0;
             await itemRepo.AddAsync(new DailyLossReportItem
             {
                 DailyLossReportId = report.Id,
                 IngredientId = ingredientId,
                 ExpectedQuantity = expectedQty,
                 ActualQuantity = actualQty,
-                VarianceQuantity = varianceQty,
-                VarianceCost = varianceQty * unitPrice,
-                CreatedByUserId = entry.EnteredByUserId
+                VarianceQuantity = actualQty - expectedQty,
+                VarianceCost = (actualQty - expectedQty) * unitPrice,
+                CreatedByUserId = userId
             }, ct);
         }
 
         await _unitOfWork.SaveChangesAsync(ct);
-
-        return await BuildLossReportDtoAsync(report, ct);
+        return report;
     }
+
+    private async Task NotifyLowStockAsync(Guid businessId, IEnumerable<Guid> ingredientIds, Dictionary<Guid, Ingredient> ingredientsById, CancellationToken ct)
+    {
+        foreach (var id in ingredientIds.Distinct())
+        {
+            if (ingredientsById.TryGetValue(id, out var ingredient) && ingredient.IsActive && ingredient.CurrentStockQuantity <= ingredient.MinimumStockThreshold)
+            {
+                await _notificationService.NotifyLowStockAsync(businessId, ingredient.Name, ingredient.CurrentStockQuantity, ingredient.MinimumStockThreshold, ct);
+            }
+        }
+    }
+
+    /// <summary>Gelir açığı veya fazla malzeme tüketimi varsa ADMIN'lere in-app uyarı (bkz. bölüm 3.10, 3.13).</summary>
+    private async Task WarnIfLossAsync(Guid businessId, DailyLossReportDto report, CancellationToken ct)
+    {
+        var revenueShortfall = report.RevenueVarianceAmount < 0 ? -report.RevenueVarianceAmount : 0;
+        var excessMaterialCost = report.Items.Where(i => i.VarianceCost > 0).Sum(i => i.VarianceCost);
+        if (revenueShortfall == 0 && excessMaterialCost == 0)
+        {
+            return;
+        }
+
+        var findings = new List<string>();
+        if (revenueShortfall > 0) findings.Add($"gelir beklenenden {revenueShortfall.ToString("N2", Tr)} ₺ eksik");
+        if (excessMaterialCost > 0) findings.Add($"malzemede {excessMaterialCost.ToString("N2", Tr)} ₺ tutarında fazla tüketim (fire/kayıp)");
+
+        await _notificationService.NotifyAdminsAsync(businessId, NotificationType.DailyLossWarning,
+            $"{report.ReportDate.ToString("dd.MM.yyyy", Tr)} gün sonu: {string.Join("; ", findings)}.", ct);
+    }
+
+    // ---- DTO ----
 
     private async Task<DailyActualEntryDto> BuildActualEntryDtoAsync(Guid businessId, DailyActualEntry entry, CancellationToken ct)
     {
         var items = await _unitOfWork.Repository<DailyActualConsumptionItem>().ListAsync(i => i.DailyActualEntryId == entry.Id, ct);
-        var ingredients = await _unitOfWork.Repository<Ingredient>().ListAsync(i => i.BusinessId == businessId, ct);
-        var ingredientsById = ingredients.ToDictionary(i => i.Id);
+        var ingredientsById = (await _unitOfWork.Repository<Ingredient>().ListAsync(i => i.BusinessId == businessId, ct)).ToDictionary(i => i.Id);
 
         var itemDtos = items.Select(i => ingredientsById.TryGetValue(i.IngredientId, out var ing)
                 ? new DailyActualConsumptionItemDto(i.IngredientId, ing.Name, ing.Unit, i.ActualQuantityUsed)
@@ -313,8 +334,7 @@ public class DailyClosingService : IDailyClosingService
     private async Task<DailyLossReportDto> BuildLossReportDtoAsync(DailyLossReport report, CancellationToken ct)
     {
         var items = await _unitOfWork.Repository<DailyLossReportItem>().ListAsync(i => i.DailyLossReportId == report.Id, ct);
-        var ingredients = await _unitOfWork.Repository<Ingredient>().ListAsync(i => i.BusinessId == report.BusinessId, ct);
-        var ingredientsById = ingredients.ToDictionary(i => i.Id);
+        var ingredientsById = (await _unitOfWork.Repository<Ingredient>().ListAsync(i => i.BusinessId == report.BusinessId, ct)).ToDictionary(i => i.Id);
 
         var itemDtos = items
             .Select(i => ingredientsById.TryGetValue(i.IngredientId, out var ing)
@@ -323,8 +343,6 @@ public class DailyClosingService : IDailyClosingService
             .OrderBy(i => i.IngredientName)
             .ToList();
 
-        return new DailyLossReportDto(
-            report.Id, report.ReportDate, report.ExpectedRevenue, report.ActualRevenue,
-            report.RevenueVarianceAmount, report.GeneratedAtUtc, itemDtos);
+        return new DailyLossReportDto(report.Id, report.ReportDate, report.ExpectedRevenue, report.ActualRevenue, report.RevenueVarianceAmount, report.GeneratedAtUtc, itemDtos);
     }
 }

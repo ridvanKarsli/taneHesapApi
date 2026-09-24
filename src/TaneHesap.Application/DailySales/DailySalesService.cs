@@ -55,6 +55,12 @@ public class DailySalesService : IDailySalesService
                 continue;
             }
 
+            if (row.TotalAmount < 0 || row.DiscountAmount is < 0)
+            {
+                errors.Add($"Satır {rowNo}: tutar ve indirim negatif olamaz.");
+                continue;
+            }
+
             validEntries.Add(new DailySalesEntry
             {
                 BusinessId = businessId,

@@ -166,9 +166,9 @@ public class TreasuryService : ITreasuryService
             throw new NotFoundException(nameof(TreasuryTransaction), transactionId);
         }
 
-        if (!ManualKinds.Contains(transaction.Kind))
+        if (!ManualKinds.Contains(transaction.Kind) || transaction.SourceReferenceType != ManualSourceType)
         {
-            throw new ConflictAppException("Satış veya gider kaynaklı kasa hareketleri buradan silinemez; ilgili satışı/gideri düzenleyin.");
+            throw new ConflictAppException("Satış, gider veya gün sonu kaynaklı kasa hareketleri buradan silinemez; ilgili satışı/gideri/kapanışı düzenleyin.");
         }
 
         // Transfer ve kart ödemesi çift kayıttır (çıkış + giriş); ikisi aynı SourceReferenceId ile bağlıdır ve birlikte silinir.
