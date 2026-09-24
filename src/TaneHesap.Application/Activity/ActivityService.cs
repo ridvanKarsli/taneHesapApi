@@ -32,7 +32,16 @@ public class ActivityService : IActivityService
     private static readonly string[] AmountKeys = { "Amount", "TotalAmount", "PaidAmount", "ActualRevenue", "QuantityChange", "Hours", "Limit" };
     private static readonly string[] DateKeys = { "ExpenseDate", "SaleDate", "EntryDate", "PurchaseDate", "PaymentDate", "WorkDate", "TransactionDate", "PeriodStartDate" };
     private static readonly string[] TextKeys = { "Description", "Note", "Name" };
-    private static readonly string[] IgnoredOnModify = { "UpdatedAtUtc", "UpdatedByUserId", "CreatedAtUtc", "CreatedByUserId" };
+    /// <summary>Değişiklik özetinde gösterilen alanlar ve işletme sahibinin anlayacağı adları; listede olmayan (teknik) alanlar gizlenir.</summary>
+    private static readonly Dictionary<string, string> FieldLabels = new()
+    {
+        ["Amount"] = "Tutar", ["TotalAmount"] = "Toplam", ["PaidAmount"] = "Ödenen", ["ActualRevenue"] = "Gerçek gelir",
+        ["Quantity"] = "Miktar", ["QuantityChange"] = "Stok değişimi", ["Hours"] = "Saat", ["HourlyWage"] = "Saatlik ücret",
+        ["UnitPrice"] = "Birim fiyat", ["Limit"] = "Limit", ["Description"] = "Açıklama", ["Note"] = "Not", ["Name"] = "Ad",
+        ["ExpenseDate"] = "Tarih", ["SaleDate"] = "Tarih", ["PurchaseDate"] = "Tarih", ["PaymentDate"] = "Tarih",
+        ["WorkDate"] = "Tarih", ["TransactionDate"] = "Tarih", ["EntryDate"] = "Tarih", ["PaidDate"] = "Ödeme tarihi",
+        ["PaymentMethod"] = "Ödeme şekli", ["IsActive"] = "Aktif", ["IsPaid"] = "Ödendi", ["DiscountAmount"] = "İndirim",
+    };
 
     private readonly IUnitOfWork _unitOfWork;
     private readonly IIdentityService _identityService;
@@ -116,9 +125,10 @@ public class ActivityService : IActivityService
         }
 
         var changes = newValues.Value.EnumerateObject()
-            .Where(p => !IgnoredOnModify.Contains(p.Name))
-            .Select(p => $"{p.Name}: {FormatValue(Get(oldValues.Value, p.Name) ?? default)} → {FormatValue(p.Value)}");
-        return string.Join(", ", changes);
+            .Where(p => FieldLabels.ContainsKey(p.Name))
+            .Select(p => $"{FieldLabels[p.Name]}: {FormatField(p.Name, Get(oldValues.Value, p.Name))} → {FormatField(p.Name, p.Value)}")
+            .ToList();
+        return changes.Count == 0 ? "Küçük düzenleme" : string.Join(", ", changes);
     }
 
     private static decimal? ReadAmount(JsonElement? element)
@@ -130,6 +140,12 @@ public class ActivityService : IActivityService
 
         var value = AmountKeys.Select(k => Get(element.Value, k)).FirstOrDefault(v => v is { ValueKind: JsonValueKind.Number });
         return value?.GetDecimal();
+    }
+
+    private static string FormatField(string key, JsonElement? value)
+    {
+        if (value is null) return "—";
+        return key == "PaymentMethod" && value.Value.ValueKind == JsonValueKind.Number ? PaymentLabel(value.Value.GetInt32()) : FormatValue(value.Value);
     }
 
     private static JsonElement? Get(JsonElement element, string key)

@@ -14,7 +14,7 @@ namespace TaneHesap.API.Controllers;
 /// </summary>
 [ApiController]
 [Route("api/audit-logs")]
-[Authorize(Roles = "Admin,SuperAdmin")]
+[Authorize(Roles = "SuperAdmin")] // Ham JSON denetim kaydı teknik görünümdür; işletme sahibi okunabilir "İşlem Geçmişi"ni kullanır (ActivityController).
 public class AuditLogsController : ControllerBase
 {
     private readonly IAuditLogService _auditLogService;
