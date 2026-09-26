@@ -32,6 +32,9 @@ public record PeriodReportDto(
     decimal InStoreRevenue,
     decimal PlatformRevenue,
     decimal TotalExpense,
+    /// <summary>Gün sonu kasa farkı (fazla +, açık −) — kasaya yazıldığı için kâra da dahildir.</summary>
+    decimal ClosingVariance,
+    /// <summary>Gelir + kasa farkı − gider.</summary>
     decimal NetProfit,
     List<ExpenseCategoryTotalDto> ExpenseByCategory,
     List<PlatformRevenueTotalDto> RevenueByPlatform,

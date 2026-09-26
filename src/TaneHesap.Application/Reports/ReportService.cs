@@ -7,10 +7,12 @@ namespace TaneHesap.Application.Reports;
 public class ReportService : IReportService
 {
     private readonly IUnitOfWork _unitOfWork;
+    private readonly IClosingVarianceTotals _closingVariance;
 
-    public ReportService(IUnitOfWork unitOfWork)
+    public ReportService(IUnitOfWork unitOfWork, IClosingVarianceTotals closingVariance)
     {
         _unitOfWork = unitOfWork;
+        _closingVariance = closingVariance;
     }
 
     public async Task<PeriodReportDto> GetPeriodReportAsync(Guid businessId, DateOnly fromDate, DateOnly toDate, CancellationToken ct = default)
@@ -55,12 +57,13 @@ public class ReportService : IReportService
             .OrderBy(d => d.PlatformName)
             .ToList();
 
-        var netProfit = totalRevenue - totalExpense;
+        var closingVariance = await _closingVariance.SumAsync(businessId, fromDate, toDate, ct);
+        var netProfit = totalRevenue + closingVariance - totalExpense;
         var salesByDish = await BuildDishSalesAsync(businessId, salesEntries, ct);
 
         return new PeriodReportDto(
             fromDate, toDate, totalRevenue, cashRevenue, cardRevenue, inStoreRevenue, platformRevenue,
-            totalExpense, netProfit, expenseByCategory, revenueByPlatform, salesByDish);
+            totalExpense, closingVariance, netProfit, expenseByCategory, revenueByPlatform, salesByDish);
     }
 
     /// <summary>Satışları tabak boyuna göre toplar; en çok satandan aza sıralı döner.</summary>

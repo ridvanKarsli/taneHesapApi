@@ -21,6 +21,8 @@ public record MonthlyReportDto(
     int Month,
     decimal TotalRevenue,
     decimal TotalExpense,
+    /// <summary>Gün sonu kasa farkı toplamı (dönem raporuyla aynı kural: kâra dahil).</summary>
+    decimal ClosingVariance,
     decimal NetProfit,
     int PlatesSold,
     decimal CostPerPlate,

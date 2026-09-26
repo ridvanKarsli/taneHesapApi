@@ -17,11 +17,13 @@ public class MonthlyReportService : IMonthlyReportService
 
     private readonly IUnitOfWork _unitOfWork;
     private readonly INotificationService _notificationService;
+    private readonly IClosingVarianceTotals _closingVariance;
 
-    public MonthlyReportService(IUnitOfWork unitOfWork, INotificationService notificationService)
+    public MonthlyReportService(IUnitOfWork unitOfWork, INotificationService notificationService, IClosingVarianceTotals closingVariance)
     {
         _unitOfWork = unitOfWork;
         _notificationService = notificationService;
+        _closingVariance = closingVariance;
     }
 
     public async Task<MonthlyReportDto> GetAsync(Guid businessId, int year, int month, CancellationToken ct = default)
@@ -43,8 +45,11 @@ public class MonthlyReportService : IMonthlyReportService
 
         var closed = (await _unitOfWork.Repository<MonthlyReport>().ListAsync(r => r.BusinessId == businessId && r.Year == year && r.Month == month, ct)).FirstOrDefault();
 
+        var monthStart = new DateOnly(year, month, 1);
+        var closingVariance = await _closingVariance.SumAsync(businessId, monthStart, monthStart.AddMonths(1).AddDays(-1), ct);
+
         return new MonthlyReportDto(
-            year, month, current.Revenue, current.Expense, current.Revenue - current.Expense, current.PlatesSold,
+            year, month, current.Revenue, current.Expense, closingVariance, current.Revenue + closingVariance - current.Expense, current.PlatesSold,
             current.CostPerPlate, current.PlatesSold == 0 ? 0 : MoneyMath.Round(current.Revenue / current.PlatesSold),
             previous.CostPerPlate, efficiency, warnings, closed?.GeneratedAtUtc);
     }

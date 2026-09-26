@@ -60,6 +60,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IDailyClosingService, DailyClosingService>();
         services.AddScoped<IReportService, ReportService>();
         services.AddScoped<IMonthlyReportService, MonthlyReportService>();
+        services.AddScoped<IClosingVarianceTotals, ClosingVarianceTotals>();
         services.AddScoped<IAuditLogService, AuditLogService>();
         services.AddScoped<IActivityService, ActivityService>();
 

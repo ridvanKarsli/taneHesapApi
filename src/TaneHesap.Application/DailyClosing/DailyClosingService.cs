@@ -39,6 +39,14 @@ public class DailyClosingService : IDailyClosingService
             throw new ValidationAppException("Gerçek gelir ve tüketim miktarları negatif olamaz.");
         }
 
+        // Kapanış, girilmiş satışlarla sayılan kasayı karşılaştırır. Satış yokken beklenen gelir 0 olur ve girilen
+        // tutarın tamamı "kasa fazlası" olarak kasaya yazılırdı (gelir raporuna ise hiç girmezdi) → önce satış şart.
+        var hasSales = await _unitOfWork.Repository<DailySalesEntry>().AnyAsync(s => s.BusinessId == businessId && s.SaleDate == request.EntryDate, ct);
+        if (!hasSales && request.ActualRevenue > 0)
+        {
+            throw new ValidationAppException("Bu gün için satış girilmemiş. Önce Satışlar sekmesinden günün satışlarını girin, sonra kapanışı yapın.");
+        }
+
         var ingredientIds = (await _unitOfWork.Repository<Ingredient>().ListAsync(i => i.BusinessId == businessId, ct)).Select(i => i.Id).ToHashSet();
         var missing = request.ConsumptionItems.FirstOrDefault(i => !ingredientIds.Contains(i.IngredientId));
         if (missing is not null)
