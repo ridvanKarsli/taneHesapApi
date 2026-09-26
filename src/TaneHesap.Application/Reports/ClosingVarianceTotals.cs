@@ -1,11 +1,16 @@
 using TaneHesap.Application.Common.Interfaces;
-using TaneHesap.Application.DailyClosing;
 using TaneHesap.Domain.Entities;
 
 namespace TaneHesap.Application.Reports;
 
 public class ClosingVarianceTotals : IClosingVarianceTotals
 {
+    /// <summary>
+    /// Kaldırılan gün sonu sayım modülünün kasaya yazdığı fark hareketleri. Yeni kayıt oluşmaz; eski kayıtlar kasada
+    /// durduğu sürece kâr da onları içermeli ki kasa ile kâr tutarlı kalsın.
+    /// </summary>
+    public const string VarianceSourceType = "DailyClosingVariance";
+
     private readonly IUnitOfWork _unitOfWork;
 
     public ClosingVarianceTotals(IUnitOfWork unitOfWork)
@@ -17,7 +22,7 @@ public class ClosingVarianceTotals : IClosingVarianceTotals
     {
         var rows = await _unitOfWork.Repository<TreasuryTransaction>().ListAsync(t =>
             t.BusinessId == businessId
-            && t.SourceReferenceType == DailyClosingService.VarianceSourceType
+            && t.SourceReferenceType == VarianceSourceType
             && t.TransactionDate >= fromDate && t.TransactionDate <= toDate, ct);
         return rows.Sum(t => t.Amount);
     }

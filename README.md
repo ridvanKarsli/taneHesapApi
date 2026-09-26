@@ -261,6 +261,9 @@ Railway `Database__MigrateOnStartup=true` olduğu için `main`'e push sonrası �
   (gecikmiş önceki + içinde bulunulan) döner; ödeme `mark-period-paid` ile, ödenen listeden çıkar.
 - **Çalışana saatle ödeme:** `POST /api/employees/{id}/payments` `amount` **veya** `hours` alır; saat verilirse
   tutar = saat × saatlik ücret (sunucuda), saat giderin miktar alanında saklanır.
+- **Gün sonu = yalnızca Excel:** sayım modülü (DailyClosing controller/service/side effect) kaldırıldı; eski
+  `DailyActualEntry`/`DailyLossReport` tabloları ve kayıtları tarihsel olarak durur (migration yok). Aylık malzeme
+  verimliliği ay içindeki tedarikçi alışlarına göre hesaplanır.
 - **Aylık rapor yalnızca biten ay için:** içinde bulunulan ay `isFinal: false` döner (genel maliyet ay içinde
   yanıltıcıdır).
 

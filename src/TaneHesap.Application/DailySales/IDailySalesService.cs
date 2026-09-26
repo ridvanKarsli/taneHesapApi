@@ -1,10 +1,9 @@
 namespace TaneHesap.Application.DailySales;
 
 /// <summary>
-/// Gün sonu Excel içe aktarımı — satış satırlarını kaydeder ve reçeteye göre o günün beklenen
-/// gelir/malzeme tüketimini hesaplar. Satılan ürünler reçeteye göre stoktan otomatik düşer ve satış
-/// geliri kasaya yazılır (IDailySalesSideEffect implementasyonları); ADMIN gün sonu kapanışında gerçek
-/// tüketimi girince yalnızca FARK fire/düzeltme olarak işlenir (bkz. DailyClosing modülü, bölüm 3.10).
+/// Gün sonu kapanışı = günün Excel'lerini (Kasa, Yemeksepeti, Uber) yüklemek. Satış satırları kaydedilir;
+/// satılan ürünler reçeteye göre stoktan otomatik düşer, gelir kasaya yazılır, komisyonlar gider olur
+/// (IDailySalesSideEffect implementasyonları). Ayrıca sayım/gerçekleşen gelir girişi yoktur.
 /// </summary>
 public interface IDailySalesService
 {

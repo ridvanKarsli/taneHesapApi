@@ -4,6 +4,8 @@ namespace TaneHesap.Application.Reports;
 /// Bir malzemenin aylık verimliliği: tüketilen miktar başına elde edilen gelir (örn. 600 kg pirinç → 600.000 ₺
 /// ⇒ 1.000 ₺/kg). Önceki aya göre <see cref="MonthlyReportService.WarningDropPercent"/>'ten fazla düşerse uyarı.
 /// </summary>
+/// <param name="QuantityUsed">Ay içinde tedarikçilerden alınan miktar (malzemenin biriminde).</param>
+/// <param name="RevenuePerUnit">Ayın toplam geliri ÷ alınan miktar (₺/birim).</param>
 public record IngredientEfficiencyDto(
     Guid IngredientId,
     string IngredientName,

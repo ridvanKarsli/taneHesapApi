@@ -1,9 +1,8 @@
 namespace TaneHesap.Application.Reports;
 
 /// <summary>
-/// Gün sonu kapanışındaki kasa farkı (sayılan − satışlardan beklenen gelir) toplamı. Kasa bu farkla artıp azaldığı
-/// için kâr/zarar raporları da aynı tutarı içermelidir; aksi halde kasa ile kâr birbirinden kopar.
-/// Tek kaynak: kapanışın kasaya yazdığı hareketler.
+/// Eski gün sonu sayımlarının kasaya yazdığı farkların (sayılan − satışlardan beklenen gelir) toplamı. Sayım modülü
+/// kaldırıldı (kapanış = günün Excel'lerini yüklemek); geçmiş fark kayıtları kasada durduğu için kâr da onları içerir.
 /// </summary>
 public interface IClosingVarianceTotals
 {

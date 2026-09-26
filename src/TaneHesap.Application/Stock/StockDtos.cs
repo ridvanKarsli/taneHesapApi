@@ -16,8 +16,8 @@ public record StockMovementDto(
 
 /// <summary>
 /// Manuel stok hareketi girişi (alış/tüketim dışı — örn. sayım düzeltmesi, fire).
-/// Alış hareketleri Suppliers modülü üzerinden, satış tüketimi ise gün sonu (DailyActualEntry)
-/// modülü üzerinden otomatik oluşturulur.
+/// Alış hareketleri Suppliers modülü üzerinden, satış tüketimi ise gün sonu Excel içe aktarımıyla
+/// (reçeteye göre) otomatik oluşturulur.
 /// </summary>
 public record CreateStockMovementRequest(
     Guid IngredientId,

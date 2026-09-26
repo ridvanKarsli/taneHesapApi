@@ -9,8 +9,7 @@ namespace TaneHesap.Application.Stock;
 /// <summary>
 /// Satılan her ürünü reçetesine göre stoktan otomatik düşer (bkz. Proje Raporu bölüm 3.9, 3.10 — güncellenen
 /// kural). Gün bazında idempotenttir: o günün önceki otomatik düşümleri geri alınır, güncel satışlara göre
-/// yeniden yazılır. Gün sonu kapanışında ADMIN'in girdiği gerçek tüketim ile bu beklenen tüketim arasındaki
-/// FARK ayrıca fire/düzeltme hareketi olarak işlenir (DailyClosingService) — toplam düşüm gerçek tüketime eşitlenir.
+/// yeniden yazılır. Reçete dışı kayıp (fire) ya da sayım farkı Stok Hareketleri'nden elle girilir.
 /// </summary>
 public class SalesStockConsumptionPoster : IDailySalesSideEffect
 {

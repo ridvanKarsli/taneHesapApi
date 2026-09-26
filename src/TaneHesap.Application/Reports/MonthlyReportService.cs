@@ -12,7 +12,6 @@ public class MonthlyReportService : IMonthlyReportService
     /// <summary>Malzeme başına gelir önceki aya göre bu oranın üzerinde düşerse uyarı verilir.</summary>
     public const decimal WarningDropPercent = 10m;
 
-    private static readonly string[] ConsumptionSourceTypes = { "DailySalesConsumption", nameof(DailyActualEntry) };
     private static readonly CultureInfo Tr = CultureInfo.GetCultureInfo("tr-TR");
 
     private readonly IUnitOfWork _unitOfWork;
@@ -143,14 +142,15 @@ public class MonthlyReportService : IMonthlyReportService
             .ListAsync(e => e.BusinessId == businessId && e.SaleDate >= from && e.SaleDate <= to, ct);
         var expenses = await _unitOfWork.Repository<Expense>()
             .ListAsync(e => e.BusinessId == businessId && e.ExpenseDate >= from && e.ExpenseDate <= to, ct);
-        var movements = await _unitOfWork.Repository<StockMovement>()
-            .ListAsync(m => m.BusinessId == businessId && m.SourceDate != null && m.SourceDate >= from && m.SourceDate <= to
-                && m.SourceReferenceType != null && ConsumptionSourceTypes.Contains(m.SourceReferenceType), ct);
+        // Verimlilik "bu ay alınan malzeme ile ne kadar gelir" üzerinden ölçülür (örn. 600 kg pirinç ile 600.000 ₺).
+        // Gün sonu sayımı yapılmadığı için satıştan reçeteyle düşülen tüketim gerçek kullanımı göstermez; alış gösterir.
+        var purchases = await _unitOfWork.Repository<SupplierPurchase>()
+            .ListAsync(p => p.BusinessId == businessId && p.PurchaseDate >= from && p.PurchaseDate <= to, ct);
 
         var revenue = sales.Sum(s => s.TotalAmount);
         var expense = expenses.Sum(e => e.Amount);
         var plates = sales.Sum(s => s.Quantity);
-        var used = movements.GroupBy(m => m.IngredientId).ToDictionary(g => g.Key, g => -g.Sum(m => m.QuantityChange));
+        var used = purchases.GroupBy(p => p.IngredientId).ToDictionary(g => g.Key, g => g.Sum(p => p.Quantity));
 
         return new MonthFigures(revenue, expense, plates, plates == 0 ? 0 : MoneyMath.Round(expense / plates), used);
     }

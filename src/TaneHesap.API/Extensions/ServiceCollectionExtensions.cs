@@ -3,7 +3,6 @@ using TaneHesap.Application.Admins;
 using TaneHesap.Application.AuditLogs;
 using TaneHesap.Application.Auth;
 using TaneHesap.Application.Businesses;
-using TaneHesap.Application.DailyClosing;
 using TaneHesap.Application.DailySales;
 using TaneHesap.Application.Dishes;
 using TaneHesap.Application.Employees;
@@ -55,9 +54,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IDailySalesSideEffect, SalesStockConsumptionPoster>();
         services.AddScoped<IDailySalesSideEffect, SalesTreasuryPoster>();
         services.AddScoped<IDailySalesSideEffect, CardFeeExpensePoster>();
-        services.AddScoped<IDailySalesSideEffect, DailyClosingRecalculationSideEffect>(); // stok düşümünden SONRA çalışmalı
         services.AddScoped<IDailySalesService, DailySalesService>();
-        services.AddScoped<IDailyClosingService, DailyClosingService>();
         services.AddScoped<IReportService, ReportService>();
         services.AddScoped<IMonthlyReportService, MonthlyReportService>();
         services.AddScoped<IClosingVarianceTotals, ClosingVarianceTotals>();
