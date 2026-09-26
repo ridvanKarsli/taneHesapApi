@@ -16,6 +16,9 @@ public interface IRepository<T> where T : BaseEntity
     /// <summary>Koşula uyan en az bir kayıt var mı (silme öncesi kullanım kontrolleri için — satırları yüklemez).</summary>
     Task<bool> AnyAsync(Expression<Func<T, bool>> predicate, CancellationToken ct = default);
 
+    /// <summary>Koşula uyan kayıtların toplamı veritabanında hesaplanır (satırlar belleğe çekilmez; örn. kasa bakiyesi).</summary>
+    Task<decimal> SumAsync(Expression<Func<T, bool>> predicate, Expression<Func<T, decimal>> selector, CancellationToken ct = default);
+
     Task AddAsync(T entity, CancellationToken ct = default);
 
     void Update(T entity);

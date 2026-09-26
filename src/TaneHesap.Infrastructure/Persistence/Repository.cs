@@ -33,6 +33,9 @@ public class Repository<T> : IRepository<T> where T : BaseEntity
     public Task<bool> AnyAsync(Expression<Func<T, bool>> predicate, CancellationToken ct = default)
         => _set.AnyAsync(predicate, ct);
 
+    public Task<decimal> SumAsync(Expression<Func<T, bool>> predicate, Expression<Func<T, decimal>> selector, CancellationToken ct = default)
+        => _set.Where(predicate).SumAsync(selector, ct);
+
     public async Task AddAsync(T entity, CancellationToken ct = default) => await _set.AddAsync(entity, ct);
 
     public void Update(T entity) => _set.Update(entity);

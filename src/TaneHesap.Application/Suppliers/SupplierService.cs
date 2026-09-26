@@ -24,13 +24,10 @@ public class SupplierService : ISupplierService
     public async Task<List<SupplierDto>> GetAllAsync(Guid businessId, CancellationToken ct = default)
     {
         var suppliers = await _unitOfWork.Repository<Supplier>().ListAsync(s => s.BusinessId == businessId, ct);
-        var result = new List<SupplierDto>();
-        foreach (var supplier in suppliers.OrderBy(s => s.Name))
-        {
-            result.Add(await BuildSupplierDtoAsync(businessId, supplier, ct));
-        }
-
-        return result;
+        var debtBySupplier = await OutstandingDebtBySupplierAsync(businessId, null, ct);
+        return suppliers.OrderBy(s => s.Name)
+            .Select(s => new SupplierDto(s.Id, s.Name, s.ContactInfo, s.IsActive, debtBySupplier.GetValueOrDefault(s.Id)))
+            .ToList();
     }
 
     public async Task<SupplierDto> GetByIdAsync(Guid businessId, Guid id, CancellationToken ct = default)
@@ -79,14 +76,7 @@ public class SupplierService : ISupplierService
 
         var purchases = await _unitOfWork.Repository<SupplierPurchase>()
             .ListAsync(p => p.BusinessId == businessId && p.SupplierId == supplierId, ct);
-
-        var result = new List<SupplierPurchaseDto>();
-        foreach (var purchase in purchases.OrderByDescending(p => p.PurchaseDate))
-        {
-            result.Add(await BuildPurchaseDtoAsync(businessId, purchase, ct));
-        }
-
-        return result;
+        return await BuildPurchaseDtosAsync(businessId, purchases.OrderByDescending(p => p.PurchaseDate).ToList(), ct);
     }
 
     public async Task<SupplierPurchaseDto> AddPurchaseAsync(Guid businessId, Guid supplierId, CreateSupplierPurchaseRequest request, Guid createdByUserId, CancellationToken ct = default)
@@ -287,17 +277,7 @@ public class SupplierService : ISupplierService
 
     public async Task<decimal> GetTotalOutstandingDebtAsync(Guid businessId, CancellationToken ct = default)
     {
-        var purchases = await _unitOfWork.Repository<SupplierPurchase>()
-            .ListAsync(p => p.BusinessId == businessId && !p.IsFullyPaid, ct);
-
-        decimal totalDebt = 0;
-        foreach (var purchase in purchases)
-        {
-            var payments = await _unitOfWork.Repository<SupplierPayment>().ListAsync(p => p.SupplierPurchaseId == purchase.Id, ct);
-            totalDebt += purchase.TotalAmount - payments.Sum(p => p.Amount);
-        }
-
-        return totalDebt;
+        return (await OutstandingDebtBySupplierAsync(businessId, null, ct)).Values.Sum();
     }
 
     public async Task DeleteAsync(Guid businessId, Guid id, CancellationToken ct = default)
@@ -323,42 +303,68 @@ public class SupplierService : ISupplierService
 
     private async Task<SupplierDto> BuildSupplierDtoAsync(Guid businessId, Supplier supplier, CancellationToken ct)
     {
-        var purchases = await _unitOfWork.Repository<SupplierPurchase>()
-            .ListAsync(p => p.BusinessId == businessId && p.SupplierId == supplier.Id && !p.IsFullyPaid, ct);
+        var debt = await OutstandingDebtBySupplierAsync(businessId, supplier.Id, ct);
+        return new SupplierDto(supplier.Id, supplier.Name, supplier.ContactInfo, supplier.IsActive, debt.GetValueOrDefault(supplier.Id));
+    }
 
-        decimal outstanding = 0;
-        foreach (var purchase in purchases)
+    /// <summary>Tedarikçi başına açık borç — ödenmemiş alışlar ve ödemeleri iki sorguda (alış başına sorgu yok).</summary>
+    private async Task<Dictionary<Guid, decimal>> OutstandingDebtBySupplierAsync(Guid businessId, Guid? supplierId, CancellationToken ct)
+    {
+        var purchases = await _unitOfWork.Repository<SupplierPurchase>().ListAsync(p =>
+            p.BusinessId == businessId && !p.IsFullyPaid && (supplierId == null || p.SupplierId == supplierId), ct);
+        var paidByPurchase = await PaidAmountsAsync(purchases.Select(p => p.Id).ToList(), ct);
+
+        return purchases
+            .GroupBy(p => p.SupplierId)
+            .ToDictionary(g => g.Key, g => g.Sum(p => p.TotalAmount - paidByPurchase.GetValueOrDefault(p.Id)));
+    }
+
+    private async Task<Dictionary<Guid, decimal>> PaidAmountsAsync(List<Guid> purchaseIds, CancellationToken ct)
+    {
+        if (purchaseIds.Count == 0)
         {
-            var payments = await _unitOfWork.Repository<SupplierPayment>().ListAsync(p => p.SupplierPurchaseId == purchase.Id, ct);
-            outstanding += purchase.TotalAmount - payments.Sum(p => p.Amount);
+            return new Dictionary<Guid, decimal>();
         }
 
-        return new SupplierDto(supplier.Id, supplier.Name, supplier.ContactInfo, supplier.IsActive, outstanding);
+        var payments = await _unitOfWork.Repository<SupplierPayment>().ListAsync(p => purchaseIds.Contains(p.SupplierPurchaseId), ct);
+        return payments.GroupBy(p => p.SupplierPurchaseId).ToDictionary(g => g.Key, g => g.Sum(p => p.Amount));
     }
 
     private async Task<SupplierPurchaseDto> BuildPurchaseDtoAsync(Guid businessId, SupplierPurchase purchase, CancellationToken ct)
+        => (await BuildPurchaseDtosAsync(businessId, new List<SupplierPurchase> { purchase }, ct))[0];
+
+    /// <summary>Alış listesi DTO'ları: malzemeler ve ödemeler toplu yüklenir (alış başına sorgu yok).</summary>
+    private async Task<List<SupplierPurchaseDto>> BuildPurchaseDtosAsync(Guid businessId, List<SupplierPurchase> purchases, CancellationToken ct)
     {
-        var ingredient = await _unitOfWork.Repository<Ingredient>().GetByIdAsync(purchase.IngredientId, ct);
-        var payments = await _unitOfWork.Repository<SupplierPayment>().ListAsync(p => p.SupplierPurchaseId == purchase.Id, ct);
-        var paidAmount = payments.Sum(p => p.Amount);
+        if (purchases.Count == 0)
+        {
+            return new List<SupplierPurchaseDto>();
+        }
 
-        var paymentDtos = payments
-            .OrderBy(p => p.PaymentDate)
-            .Select(p => new SupplierPaymentDto(p.Id, p.Amount, p.PaymentDate, p.PaymentMethod))
-            .ToList();
+        var ingredientIds = purchases.Select(p => p.IngredientId).Distinct().ToList();
+        var ingredientNames = (await _unitOfWork.Repository<Ingredient>().ListAsync(i => i.BusinessId == businessId && ingredientIds.Contains(i.Id), ct))
+            .ToDictionary(i => i.Id, i => i.Name);
+        var purchaseIds = purchases.Select(p => p.Id).ToList();
+        var paymentsByPurchase = (await _unitOfWork.Repository<SupplierPayment>().ListAsync(p => purchaseIds.Contains(p.SupplierPurchaseId), ct))
+            .ToLookup(p => p.SupplierPurchaseId);
 
-        return new SupplierPurchaseDto(
-            purchase.Id,
-            purchase.SupplierId,
-            purchase.IngredientId,
-            ingredient?.Name ?? string.Empty,
-            purchase.Quantity,
-            purchase.UnitPrice,
-            purchase.TotalAmount,
-            purchase.PurchaseDate,
-            purchase.IsFullyPaid,
-            paidAmount,
-            purchase.TotalAmount - paidAmount,
-            paymentDtos);
+        return purchases.Select(purchase =>
+        {
+            var payments = paymentsByPurchase[purchase.Id].OrderBy(p => p.PaymentDate).ToList();
+            var paidAmount = payments.Sum(p => p.Amount);
+            return new SupplierPurchaseDto(
+                purchase.Id,
+                purchase.SupplierId,
+                purchase.IngredientId,
+                ingredientNames.GetValueOrDefault(purchase.IngredientId, string.Empty),
+                purchase.Quantity,
+                purchase.UnitPrice,
+                purchase.TotalAmount,
+                purchase.PurchaseDate,
+                purchase.IsFullyPaid,
+                paidAmount,
+                purchase.TotalAmount - paidAmount,
+                payments.Select(p => new SupplierPaymentDto(p.Id, p.Amount, p.PaymentDate, p.PaymentMethod)).ToList());
+        }).ToList();
     }
 }

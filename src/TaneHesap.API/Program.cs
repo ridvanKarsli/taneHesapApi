@@ -65,8 +65,14 @@ builder.Services.AddCors(options =>
               .AllowAnyMethod()
               // SignalR istemcisi negotiate isteğini kimlik bilgisiyle (withCredentials) gönderir;
               // bu olmadan tarayıcı CORS'ta reddeder ve anlık bildirimler hiç bağlanmaz.
-              .AllowCredentials());
+              .AllowCredentials()
+              // Tarayıcı her yeni adres için önce OPTIONS (preflight) atar; sonucu 24 saat önbelleğe almazsa
+              // her istek sunucuya iki kez gider (uzak sunucuda gecikme ikiye katlanır).
+              .SetPreflightMaxAge(TimeSpan.FromHours(24)));
 });
+
+// JSON yanıtları sıkıştırılır (listeler 5-10 kat küçülür; mobil bağlantıda fark belirgindir).
+builder.Services.AddResponseCompression(options => options.EnableForHttps = true);
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
@@ -135,7 +141,9 @@ forwardedHeaders.KnownIPNetworks.Clear();
 forwardedHeaders.KnownProxies.Clear();
 app.UseForwardedHeaders(forwardedHeaders);
 
+app.UseMiddleware<RequestTimingMiddleware>();
 app.UseMiddleware<ExceptionHandlingMiddleware>();
+app.UseResponseCompression();
 
 app.UseHttpsRedirection();
 
@@ -146,6 +154,6 @@ app.UseAuthorization();
 
 app.MapControllers();
 app.MapHub<NotificationsHub>("/hubs/notifications");
-app.MapGet("/health", () => Results.Ok(new { status = "ok", utc = DateTime.UtcNow })).AllowAnonymous(); // Railway sağlık kontrolü
+app.MapHealthEndpoints();
 
 app.Run();

@@ -27,27 +27,28 @@ public class TreasuryService : ITreasuryService
     {
         var business = await _unitOfWork.Repository<Business>().GetByIdAsync(businessId, ct)
             ?? throw new NotFoundException(nameof(Business), businessId);
-        var transactions = await _unitOfWork.Repository<TreasuryTransaction>().ListAsync(t => t.BusinessId == businessId, ct);
-        var cards = await _unitOfWork.Repository<PaymentCard>().ListAsync(c => c.BusinessId == businessId, ct);
+        // Bakiyeler veritabanında toplanır: defter büyüdükçe tüm hareketleri belleğe çekmek yavaşlardı.
+        var repo = _unitOfWork.Repository<TreasuryTransaction>();
+        var cash = await repo.SumAsync(t => t.BusinessId == businessId && t.Account == TreasuryAccount.Cash, t => t.Amount, ct);
+        var bank = await repo.SumAsync(t => t.BusinessId == businessId && t.Account == TreasuryAccount.Bank, t => t.Amount, ct);
 
-        return new TreasurySummaryDto(
-            transactions.Where(t => t.Account == TreasuryAccount.Cash).Sum(t => t.Amount),
-            transactions.Where(t => t.Account == TreasuryAccount.Bank).Sum(t => t.Amount),
-            business.CardFeePercentage,
-            cards.OrderBy(c => c.Name).Select(c => ToDto(c, transactions)).ToList());
+        return new TreasurySummaryDto(cash, bank, business.CardFeePercentage, await GetCardsAsync(businessId, ct));
     }
 
     public async Task<List<TreasuryTransactionDto>> GetTransactionsAsync(Guid businessId, TreasuryTransactionFilter filter, CancellationToken ct = default)
     {
-        var transactions = await _unitOfWork.Repository<TreasuryTransaction>().ListAsync(t => t.BusinessId == businessId, ct);
+        var from = filter.FromDate;
+        var to = filter.ToDate;
+        var account = filter.Account;
+        var cardId = filter.PaymentCardId;
+        var query = await _unitOfWork.Repository<TreasuryTransaction>().ListAsync(t =>
+            t.BusinessId == businessId
+            && (from == null || t.TransactionDate >= from)
+            && (to == null || t.TransactionDate <= to)
+            && (account == null || t.Account == account)
+            && (cardId == null || t.PaymentCardId == cardId), ct);
         var cardNames = (await _unitOfWork.Repository<PaymentCard>().ListAsync(c => c.BusinessId == businessId, ct))
             .ToDictionary(c => c.Id, c => c.Name);
-
-        var query = transactions.AsEnumerable();
-        if (filter.FromDate.HasValue) query = query.Where(t => t.TransactionDate >= filter.FromDate.Value);
-        if (filter.ToDate.HasValue) query = query.Where(t => t.TransactionDate <= filter.ToDate.Value);
-        if (filter.Account.HasValue) query = query.Where(t => t.Account == filter.Account.Value);
-        if (filter.PaymentCardId.HasValue) query = query.Where(t => t.PaymentCardId == filter.PaymentCardId.Value);
 
         return query
             .OrderByDescending(t => t.TransactionDate).ThenByDescending(t => t.CreatedAtUtc)
@@ -58,9 +59,13 @@ public class TreasuryService : ITreasuryService
     public async Task<List<PaymentCardDto>> GetCardsAsync(Guid businessId, CancellationToken ct = default)
     {
         var cards = await _unitOfWork.Repository<PaymentCard>().ListAsync(c => c.BusinessId == businessId, ct);
-        var transactions = await _unitOfWork.Repository<TreasuryTransaction>()
-            .ListAsync(t => t.BusinessId == businessId && t.Account == TreasuryAccount.CreditCard, ct);
-        return cards.OrderBy(c => c.Name).Select(c => ToDto(c, transactions)).ToList();
+        var result = new List<PaymentCardDto>();
+        foreach (var card in cards.OrderBy(c => c.Name))
+        {
+            result.Add(await ToDtoAsync(card, ct)); // kart sayısı küçük; her kartın kullanımı veritabanında toplanır
+        }
+
+        return result;
     }
 
     public async Task<PaymentCardDto> CreateCardAsync(Guid businessId, CreatePaymentCardRequest request, Guid userId, CancellationToken ct = default)
@@ -69,7 +74,7 @@ public class TreasuryService : ITreasuryService
         var card = new PaymentCard { BusinessId = businessId, Name = request.Name.Trim(), Limit = request.Limit, CreatedByUserId = userId };
         await _unitOfWork.Repository<PaymentCard>().AddAsync(card, ct);
         await _unitOfWork.SaveChangesAsync(ct);
-        return ToDto(card, Array.Empty<TreasuryTransaction>());
+        return new PaymentCardDto(card.Id, card.Name, card.Limit, 0, card.Limit, card.IsActive); // yeni kartın harcaması yok
     }
 
     public async Task<PaymentCardDto> UpdateCardAsync(Guid businessId, Guid cardId, UpdatePaymentCardRequest request, Guid userId, CancellationToken ct = default)
@@ -84,8 +89,7 @@ public class TreasuryService : ITreasuryService
         _unitOfWork.Repository<PaymentCard>().Update(card);
         await _unitOfWork.SaveChangesAsync(ct);
 
-        var transactions = await _unitOfWork.Repository<TreasuryTransaction>().ListAsync(t => t.PaymentCardId == cardId, ct);
-        return ToDto(card, transactions);
+        return await ToDtoAsync(card, ct);
     }
 
     public async Task DeleteCardAsync(Guid businessId, Guid cardId, CancellationToken ct = default)
@@ -258,10 +262,10 @@ public class TreasuryService : ITreasuryService
         if (amount < 0) throw new ValidationAppException($"{subject} negatif olamaz.");
     }
 
-    private static PaymentCardDto ToDto(PaymentCard card, IEnumerable<TreasuryTransaction> transactions)
+    private async Task<PaymentCardDto> ToDtoAsync(PaymentCard card, CancellationToken ct)
     {
         // Kart hareketleri: gider negatif, ödeme pozitif → toplam, kullanılan limitin negatifi.
-        var used = -transactions.Where(t => t.PaymentCardId == card.Id).Sum(t => t.Amount);
+        var used = -await _unitOfWork.Repository<TreasuryTransaction>().SumAsync(t => t.PaymentCardId == card.Id, t => t.Amount, ct);
         return new PaymentCardDto(card.Id, card.Name, card.Limit, used, card.Limit - used, card.IsActive);
     }
 

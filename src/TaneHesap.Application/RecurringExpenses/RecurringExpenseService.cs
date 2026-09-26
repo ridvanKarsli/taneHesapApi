@@ -24,13 +24,8 @@ public class RecurringExpenseService : IRecurringExpenseService
     public async Task<List<RecurringExpenseDto>> GetAllAsync(Guid businessId, CancellationToken ct = default)
     {
         var items = await _unitOfWork.Repository<RecurringExpense>().ListAsync(r => r.BusinessId == businessId, ct);
-        var result = new List<RecurringExpenseDto>();
-        foreach (var item in items.OrderBy(r => r.Name))
-        {
-            result.Add(await BuildDtoAsync(item, ct));
-        }
-
-        return result;
+        var paid = await PaidPeriodsAsync(items, ct);
+        return items.OrderBy(r => r.Name).Select(item => ToCurrentDto(item, paid)).ToList();
     }
 
     public async Task<RecurringExpenseDto> GetByIdAsync(Guid businessId, Guid id, CancellationToken ct = default)
@@ -148,12 +143,13 @@ public class RecurringExpenseService : IRecurringExpenseService
     public async Task<List<RecurringExpenseDto>> GetDueForReminderAsync(Guid businessId, CancellationToken ct = default)
     {
         var items = await _unitOfWork.Repository<RecurringExpense>().ListAsync(r => r.BusinessId == businessId && r.IsActive, ct);
+        var paid = await PaidPeriodsAsync(items, ct);
         var today = BusinessClock.Today;
         var result = new List<RecurringExpenseDto>();
 
         foreach (var item in items)
         {
-            foreach (var (start, end, isOverdue) in await UnpaidPeriodsAsync(item, today, ct))
+            foreach (var (start, end, isOverdue) in UnpaidPeriods(item, today, paid))
             {
                 if (isOverdue || end.DayNumber - today.DayNumber <= ReminderLeadDays)
                 {
@@ -168,12 +164,13 @@ public class RecurringExpenseService : IRecurringExpenseService
     public async Task<List<RecurringPayableDto>> GetPayablesAsync(Guid businessId, CancellationToken ct = default)
     {
         var items = await _unitOfWork.Repository<RecurringExpense>().ListAsync(r => r.BusinessId == businessId && r.IsActive, ct);
+        var paid = await PaidPeriodsAsync(items, ct);
         var today = BusinessClock.Today;
         var result = new List<RecurringPayableDto>();
 
         foreach (var item in items)
         {
-            foreach (var (start, end, isOverdue) in await UnpaidPeriodsAsync(item, today, ct))
+            foreach (var (start, end, isOverdue) in UnpaidPeriods(item, today, paid))
             {
                 result.Add(new RecurringPayableDto(item.Id, item.Name, item.Amount, item.Period, item.IntervalCount, start, end, isOverdue));
             }
@@ -183,7 +180,7 @@ public class RecurringExpenseService : IRecurringExpenseService
     }
 
     /// <summary>Ödenmemiş dönemler: bir önceki dönem (gecikmiş) ve içinde bulunulan dönem. Başlangıçtan önce dönem yoktur.</summary>
-    private async Task<List<(DateOnly Start, DateOnly End, bool IsOverdue)>> UnpaidPeriodsAsync(RecurringExpense item, DateOnly today, CancellationToken ct)
+    private static List<(DateOnly Start, DateOnly End, bool IsOverdue)> UnpaidPeriods(RecurringExpense item, DateOnly today, PaidPeriods paid)
     {
         var schedule = ScheduleOf(item);
         var index = schedule.IndexAt(today);
@@ -192,14 +189,14 @@ public class RecurringExpenseService : IRecurringExpenseService
         if (index > 0)
         {
             var (previousStart, previousEnd) = schedule.PeriodAt(index - 1);
-            if (!await IsPeriodPaidAsync(item.Id, previousStart, ct))
+            if (!paid.Contains((item.Id, previousStart)))
             {
                 unpaid.Add((previousStart, previousEnd, true));
             }
         }
 
         var (start, end) = schedule.PeriodAt(index);
-        if (start <= today && !await IsPeriodPaidAsync(item.Id, start, ct))
+        if (start <= today && !paid.Contains((item.Id, start)))
         {
             unpaid.Add((start, end, false));
         }
@@ -250,14 +247,34 @@ public class RecurringExpenseService : IRecurringExpenseService
     }
 
     private async Task<RecurringExpenseDto> BuildDtoAsync(RecurringExpense entity, CancellationToken ct)
+        => ToCurrentDto(entity, await PaidPeriodsAsync(new List<RecurringExpense> { entity }, ct));
+
+    private static RecurringExpenseDto ToCurrentDto(RecurringExpense entity, PaidPeriods paid)
     {
         var (periodStart, periodEnd) = ScheduleOf(entity).PeriodContaining(BusinessClock.Today);
-        return ToDto(entity, periodStart, periodEnd, await IsPeriodPaidAsync(entity.Id, periodStart, ct));
+        return ToDto(entity, periodStart, periodEnd, paid.Contains((entity.Id, periodStart)));
     }
 
-    private Task<bool> IsPeriodPaidAsync(Guid recurringExpenseId, DateOnly periodStart, CancellationToken ct) =>
-        _unitOfWork.Repository<RecurringExpensePayment>()
-            .AnyAsync(p => p.RecurringExpenseId == recurringExpenseId && p.PeriodStartDate == periodStart && p.IsPaid, ct);
+    /// <summary>Verilen düzenli giderlerin ödenmiş dönemleri tek sorguda — kayıt/dönem başına sorgu atılmaz (N+1).</summary>
+    private async Task<PaidPeriods> PaidPeriodsAsync(List<RecurringExpense> items, CancellationToken ct)
+    {
+        var ids = items.Select(i => i.Id).ToList();
+        if (ids.Count == 0)
+        {
+            return new PaidPeriods();
+        }
+
+        var payments = await _unitOfWork.Repository<RecurringExpensePayment>().ListAsync(p => ids.Contains(p.RecurringExpenseId) && p.IsPaid, ct);
+        return new PaidPeriods(payments.Select(p => (p.RecurringExpenseId, p.PeriodStartDate)));
+    }
+
+    /// <summary>(düzenli gider, dönem başlangıcı) → ödendi.</summary>
+    private sealed class PaidPeriods : HashSet<(Guid RecurringExpenseId, DateOnly PeriodStart)>
+    {
+        public PaidPeriods() { }
+
+        public PaidPeriods(IEnumerable<(Guid, DateOnly)> items) : base(items) { }
+    }
 
     private static RecurringExpenseDto ToDto(RecurringExpense entity, DateOnly periodStart, DateOnly periodEnd, bool isPaid) =>
         new(entity.Id, entity.Name, entity.Amount, entity.Period, entity.IntervalCount, entity.StartDate, entity.IsActive, periodStart, periodEnd, isPaid);

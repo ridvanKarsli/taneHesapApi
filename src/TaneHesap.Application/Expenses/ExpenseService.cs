@@ -23,24 +23,19 @@ public class ExpenseService : IExpenseService
 
     public async Task<List<ExpenseDto>> GetListAsync(Guid businessId, ExpenseListFilter filter, CancellationToken ct = default)
     {
-        var expenses = await _unitOfWork.Repository<Expense>().ListAsync(e => e.BusinessId == businessId, ct);
-
-        var query = expenses.AsEnumerable();
-
-        if (filter.FromDate.HasValue)
-            query = query.Where(e => e.ExpenseDate >= filter.FromDate.Value);
-
-        if (filter.ToDate.HasValue)
-            query = query.Where(e => e.ExpenseDate <= filter.ToDate.Value);
-
-        if (filter.ExpenseTypeId.HasValue)
-            query = query.Where(e => e.ExpenseTypeId == filter.ExpenseTypeId.Value);
-
-        if (filter.CreatedByUserId.HasValue)
-            query = query.Where(e => e.CreatedByUserId == filter.CreatedByUserId.Value);
-
-        if (filter.EmployeeUserId.HasValue)
-            query = query.Where(e => e.EmployeeUserId == filter.EmployeeUserId.Value);
+        // Filtreler veritabanında uygulanır: işletmenin tüm giderlerini çekip bellekte süzmek kayıt arttıkça yavaşlar.
+        var from = filter.FromDate;
+        var to = filter.ToDate;
+        var typeId = filter.ExpenseTypeId;
+        var createdBy = filter.CreatedByUserId;
+        var employee = filter.EmployeeUserId;
+        var query = await _unitOfWork.Repository<Expense>().ListAsync(e =>
+            e.BusinessId == businessId
+            && (from == null || e.ExpenseDate >= from)
+            && (to == null || e.ExpenseDate <= to)
+            && (typeId == null || e.ExpenseTypeId == typeId)
+            && (createdBy == null || e.CreatedByUserId == createdBy)
+            && (employee == null || e.EmployeeUserId == employee), ct);
 
         var lookups = await LoadLookupsAsync(businessId, ct);
 

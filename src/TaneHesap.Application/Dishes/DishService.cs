@@ -17,13 +17,8 @@ public class DishService : IDishService
     public async Task<List<DishDto>> GetAllAsync(Guid businessId, CancellationToken ct = default)
     {
         var dishes = await _unitOfWork.Repository<Dish>().ListAsync(d => d.BusinessId == businessId, ct);
-        var result = new List<DishDto>();
-        foreach (var dish in dishes.OrderBy(d => d.Name))
-        {
-            result.Add(await BuildDishDtoAsync(businessId, dish, ct));
-        }
-
-        return result;
+        var catalog = await LoadCatalogAsync(businessId, dishes.Select(d => d.Id).ToList(), ct);
+        return dishes.OrderBy(d => d.Name).Select(d => ToDto(d, catalog)).ToList();
     }
 
     public async Task<DishDto> GetByIdAsync(Guid businessId, Guid dishId, CancellationToken ct = default)
@@ -213,29 +208,47 @@ public class DishService : IDishService
     }
 
     private async Task<DishDto> BuildDishDtoAsync(Guid businessId, Dish dish, CancellationToken ct)
-    {
-        var sizes = await _unitOfWork.Repository<DishSize>().ListAsync(s => s.DishId == dish.Id, ct);
-        var sizeDtos = new List<DishSizeDto>();
-        foreach (var size in sizes.OrderBy(s => s.SalePrice))
-        {
-            sizeDtos.Add(await BuildDishSizeDtoAsync(businessId, size, ct));
-        }
-
-        return new DishDto(dish.Id, dish.Name, dish.Description, dish.IsActive, sizeDtos);
-    }
+        => ToDto(dish, await LoadCatalogAsync(businessId, new List<Guid> { dish.Id }, ct));
 
     private async Task<DishSizeDto> BuildDishSizeDtoAsync(Guid businessId, DishSize size, CancellationToken ct)
-    {
-        var recipeItems = await _unitOfWork.Repository<DishRecipeItem>().ListAsync(r => r.DishSizeId == size.Id, ct);
-        var ingredients = await _unitOfWork.Repository<Ingredient>().ListAsync(i => i.BusinessId == businessId, ct);
-        var ingredientsById = ingredients.ToDictionary(i => i.Id);
+        => ToDto(size, await LoadCatalogAsync(businessId, new List<Guid> { size.DishId }, ct));
 
+    /// <summary>
+    /// Ürün listesi için gereken her şey sabit sayıda sorguyla (boylar, reçete kalemleri, malzemeler) — ürün/boy başına
+    /// ayrı sorgu atılmaz (N+1). Veritabanı gidiş-dönüşü pahalı olduğu için liste ne kadar büyürse büyüsün 3 sorgu.
+    /// </summary>
+    private async Task<DishCatalog> LoadCatalogAsync(Guid businessId, List<Guid> dishIds, CancellationToken ct)
+    {
+        var sizes = await _unitOfWork.Repository<DishSize>().ListAsync(s => dishIds.Contains(s.DishId), ct);
+        var sizeIds = sizes.Select(s => s.Id).ToList();
+        var recipeItems = sizeIds.Count == 0
+            ? new List<DishRecipeItem>()
+            : await _unitOfWork.Repository<DishRecipeItem>().ListAsync(r => sizeIds.Contains(r.DishSizeId), ct);
+        var ingredients = await _unitOfWork.Repository<Ingredient>().ListAsync(i => i.BusinessId == businessId, ct);
+
+        return new DishCatalog(
+            sizes.ToLookup(s => s.DishId),
+            recipeItems.ToLookup(r => r.DishSizeId),
+            ingredients.ToDictionary(i => i.Id));
+    }
+
+    private sealed record DishCatalog(
+        ILookup<Guid, DishSize> SizesByDish,
+        ILookup<Guid, DishRecipeItem> RecipeBySize,
+        IReadOnlyDictionary<Guid, Ingredient> Ingredients);
+
+    private static DishDto ToDto(Dish dish, DishCatalog catalog) => new(
+        dish.Id, dish.Name, dish.Description, dish.IsActive,
+        catalog.SizesByDish[dish.Id].OrderBy(s => s.SalePrice).Select(s => ToDto(s, catalog)).ToList());
+
+    private static DishSizeDto ToDto(DishSize size, DishCatalog catalog)
+    {
         var recipeDtos = new List<RecipeItemDto>();
         decimal totalCost = 0;
 
-        foreach (var item in recipeItems)
+        foreach (var item in catalog.RecipeBySize[size.Id])
         {
-            if (!ingredientsById.TryGetValue(item.IngredientId, out var ingredient))
+            if (!catalog.Ingredients.TryGetValue(item.IngredientId, out var ingredient))
             {
                 continue;
             }
@@ -245,8 +258,6 @@ public class DishService : IDishService
             recipeDtos.Add(new RecipeItemDto(ingredient.Id, ingredient.Name, item.Quantity, ingredient.Unit, lineCost));
         }
 
-        var profitMargin = size.SalePrice - totalCost;
-
-        return new DishSizeDto(size.Id, size.Name, size.SalePrice, size.IsActive, totalCost, profitMargin, recipeDtos);
+        return new DishSizeDto(size.Id, size.Name, size.SalePrice, size.IsActive, totalCost, size.SalePrice - totalCost, recipeDtos);
     }
 }
