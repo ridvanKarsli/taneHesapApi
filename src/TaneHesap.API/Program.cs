@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi.Models;
 using TaneHesap.API.BackgroundJobs;
 using TaneHesap.API.Extensions;
+using TaneHesap.API.Filters;
 using TaneHesap.API.Hubs;
 using TaneHesap.API.Middleware;
 using TaneHesap.API.Services;
@@ -31,7 +32,8 @@ if (!builder.Environment.IsDevelopment() && (builder.Configuration["Jwt:Secret"]
 
 // --- Servisler ---
 
-builder.Services.AddControllers();
+// Yazan istekler tek transaction'da (bkz. Filters/TransactionActionFilter).
+builder.Services.AddControllers(options => options.Filters.Add<TransactionActionFilter>());
 
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<SystemExecutionScope>();
@@ -144,5 +146,6 @@ app.UseAuthorization();
 
 app.MapControllers();
 app.MapHub<NotificationsHub>("/hubs/notifications");
+app.MapGet("/health", () => Results.Ok(new { status = "ok", utc = DateTime.UtcNow })).AllowAnonymous(); // Railway sağlık kontrolü
 
 app.Run();

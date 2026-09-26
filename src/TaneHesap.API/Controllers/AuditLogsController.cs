@@ -40,7 +40,16 @@ public class AuditLogsController : ControllerBase
             ? businessId
             : _currentUserService.BusinessId;
 
-        var query = new AuditLogQuery(scopedBusinessId, entityName, fromUtc, toUtc);
+        // Npgsql, timestamptz için yalnızca Kind=Utc kabul eder; "?fromUtc=2026-09-01" gibi saat dilimsiz değerler Utc sayılır.
+        var query = new AuditLogQuery(scopedBusinessId, entityName, AsUtc(fromUtc), AsUtc(toUtc));
         return Ok(await _auditLogService.GetLogsAsync(query, ct));
     }
+
+    private static DateTime? AsUtc(DateTime? value) => value switch
+    {
+        null => null,
+        { Kind: DateTimeKind.Utc } v => v,
+        { Kind: DateTimeKind.Local } v => v.ToUniversalTime(),
+        var v => DateTime.SpecifyKind(v.Value, DateTimeKind.Utc)
+    };
 }

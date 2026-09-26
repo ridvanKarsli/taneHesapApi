@@ -1,5 +1,6 @@
 using TaneHesap.Application.Common.Interfaces;
 using TaneHesap.Domain.Entities;
+using TaneHesap.Domain.Enums;
 
 namespace TaneHesap.Application.Auth;
 
@@ -30,13 +31,21 @@ public class AuthService : IAuthService
             return ServiceResult<LoginResponse>.Fail("Kullanıcı adı veya şifre hatalı.");
         }
 
+        if (!await IsBusinessUsableAsync(user, ct))
+        {
+            return ServiceResult<LoginResponse>.Fail("İşletmeniz pasif durumda; giriş yapılamaz.");
+        }
+
         // Not: authenticator (2FA) zorunluluğu kaldırıldı — tüm roller sadece kullanıcı adı/şifre
         // ile giriş yapar (bkz. Proje Raporu bölüm 2, 7).
         var response = await IssueTokensAsync(user, ipAddress, ct);
         return ServiceResult<LoginResponse>.Ok(response);
     }
 
-    public async Task<ServiceResult<LoginResponse>> RefreshTokenAsync(string refreshToken, string? ipAddress, CancellationToken ct = default)
+    public Task<ServiceResult<LoginResponse>> RefreshTokenAsync(string refreshToken, string? ipAddress, CancellationToken ct = default)
+        => RefreshTokenAsync(refreshToken, actingBusinessId: null, ipAddress, ct);
+
+    public async Task<ServiceResult<LoginResponse>> RefreshTokenAsync(string refreshToken, Guid? actingBusinessId, string? ipAddress, CancellationToken ct = default)
     {
         var tokenHash = _jwtTokenService.HashRefreshToken(refreshToken);
         var repo = _unitOfWork.Repository<RefreshToken>();
@@ -48,7 +57,7 @@ public class AuthService : IAuthService
         }
 
         var user = await _identityService.GetByIdAsync(existing.UserId);
-        if (user is null || !user.IsActive)
+        if (user is null || !user.IsActive || !await IsBusinessUsableAsync(user, ct))
         {
             return ServiceResult<LoginResponse>.Fail("Kullanıcı bulunamadı veya pasif.");
         }
@@ -56,8 +65,35 @@ public class AuthService : IAuthService
         // Rotation: eski refresh token iptal edilir, yenisi verilir.
         existing.RevokedAtUtc = DateTime.UtcNow;
 
-        var response = await IssueTokensAsync(user, ipAddress, ct, existingTokenToReplace: existing);
+        var acting = actingBusinessId is not null && user.Role == UserRole.SuperAdmin
+            ? await FindActiveBusinessAsync(actingBusinessId.Value, ct)
+            : null;
+
+        var response = await IssueTokensAsync(user, ipAddress, ct, existingTokenToReplace: existing, actingBusiness: acting);
         return ServiceResult<LoginResponse>.Ok(response);
+    }
+
+    public async Task<ServiceResult<LoginResponse>> EnterBusinessAsync(Guid superAdminUserId, Guid businessId, string? ipAddress, CancellationToken ct = default)
+    {
+        var user = await _identityService.GetByIdAsync(superAdminUserId);
+        if (user is null || !user.IsActive || user.Role != UserRole.SuperAdmin)
+        {
+            return ServiceResult<LoginResponse>.Fail("Yalnızca süper yönetici bir işletmeye girebilir.");
+        }
+
+        var business = await FindActiveBusinessAsync(businessId, ct);
+        if (business is null)
+        {
+            return ServiceResult<LoginResponse>.Fail("İşletme bulunamadı veya pasif.");
+        }
+
+        return ServiceResult<LoginResponse>.Ok(await IssueTokensAsync(user, ipAddress, ct, actingBusiness: business));
+    }
+
+    private async Task<Business?> FindActiveBusinessAsync(Guid businessId, CancellationToken ct)
+    {
+        var business = await _unitOfWork.Repository<Business>().GetByIdAsync(businessId, ct);
+        return business is { IsActive: true } ? business : null;
     }
 
     public async Task RevokeRefreshTokenAsync(string refreshToken, CancellationToken ct = default)
@@ -74,10 +110,28 @@ public class AuthService : IAuthService
         }
     }
 
-    private async Task<LoginResponse> IssueTokensAsync(
-        ApplicationUserInfo user, string? ipAddress, CancellationToken ct, RefreshToken? existingTokenToReplace = null)
+    /// <summary>SUPER_ADMIN işletmeye bağlı değildir; ADMIN/EMPLOYEE'nin işletmesi pasifse oturum açılamaz ve yenilenemez.</summary>
+    private async Task<bool> IsBusinessUsableAsync(ApplicationUserInfo user, CancellationToken ct)
     {
-        var accessToken = _jwtTokenService.GenerateAccessToken(user.UserId, user.Username, user.FullName, user.Role, user.BusinessId);
+        if (user.BusinessId is null)
+        {
+            return user.Role == UserRole.SuperAdmin;
+        }
+
+        var business = await _unitOfWork.Repository<Business>().GetByIdAsync(user.BusinessId.Value, ct);
+        return business is { IsActive: true };
+    }
+
+    private async Task<LoginResponse> IssueTokensAsync(
+        ApplicationUserInfo user, string? ipAddress, CancellationToken ct, RefreshToken? existingTokenToReplace = null, Business? actingBusiness = null)
+    {
+        // İşletme içindeki SUPER_ADMIN: rol Admin, business_id o işletme; kullanıcı kimliği (sub) kendisi kalır.
+        var role = actingBusiness is null ? user.Role : UserRole.Admin;
+        var businessId = actingBusiness?.Id ?? user.BusinessId;
+        var businessName = actingBusiness?.Name
+            ?? (user.BusinessId is null ? null : (await _unitOfWork.Repository<Business>().GetByIdAsync(user.BusinessId.Value, ct))?.Name);
+
+        var accessToken = _jwtTokenService.GenerateAccessToken(user.UserId, user.Username, user.FullName, role, businessId);
 
         var refreshTokenValue = _jwtTokenService.GenerateRefreshTokenValue();
         var refreshTokenHash = _jwtTokenService.HashRefreshToken(refreshTokenValue);
@@ -107,7 +161,9 @@ public class AuthService : IAuthService
             refreshTokenExpiresAtUtc,
             user.UserId,
             user.FullName,
-            user.Role,
-            user.BusinessId);
+            role,
+            businessId,
+            businessName,
+            IsActingAsBusiness: actingBusiness is not null);
     }
 }

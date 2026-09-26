@@ -77,6 +77,8 @@ public class DailySalesService : IDailySalesService
             });
         }
 
+        await GuardAgainstDoubleImportAsync(businessId, validEntries, request.Mode, ct);
+
         var importLog = new ExcelImportLog
         {
             BusinessId = businessId,
@@ -103,6 +105,38 @@ public class DailySalesService : IDailySalesService
         await ApplySideEffectsAsync(businessId, validEntries.Select(e => e.SaleDate), importedByUserId, ct);
 
         return new ImportDailySalesResult(importLog.Id, request.Rows.Count, validEntries.Count, errors.Count, errors);
+    }
+
+    /// <summary>
+    /// Aynı dosyanın (ya da aynı günün) ikinci kez yüklenmesi geliri, kasayı ve stok düşümünü iki katına çıkarırdı.
+    /// Dosyadaki tarihlerde kayıt varsa ya reddedilir ya da (ReplaceExisting) o günlerin kayıtları önce silinir.
+    /// </summary>
+    private async Task GuardAgainstDoubleImportAsync(Guid businessId, List<DailySalesEntry> incoming, DailySalesImportMode mode, CancellationToken ct)
+    {
+        var dates = incoming.Select(e => e.SaleDate).Distinct().ToList();
+        if (dates.Count == 0 || mode == DailySalesImportMode.Append)
+        {
+            return;
+        }
+
+        var repo = _unitOfWork.Repository<DailySalesEntry>();
+        var existing = await repo.ListAsync(e => e.BusinessId == businessId && dates.Contains(e.SaleDate), ct);
+        if (existing.Count == 0)
+        {
+            return;
+        }
+
+        if (mode == DailySalesImportMode.RejectIfExists)
+        {
+            var listed = string.Join(", ", existing.Select(e => e.SaleDate).Distinct().OrderBy(d => d).Select(d => d.ToString("dd.MM.yyyy")));
+            throw new ConflictAppException(
+                $"{listed} tarih(ler)i için satış kaydı zaten var. Dosyayı yeniden yüklemek istiyorsanız \"o günlerin mevcut kayıtlarını değiştir\" seçeneğini işaretleyin.");
+        }
+
+        foreach (var entry in existing)
+        {
+            repo.Remove(entry);
+        }
     }
 
     public async Task DeleteEntryAsync(Guid businessId, Guid entryId, Guid deletedByUserId, CancellationToken ct = default)

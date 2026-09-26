@@ -100,7 +100,27 @@ public class SupplierService : ISupplierService
             throw new NotFoundException(nameof(Ingredient), request.IngredientId);
         }
 
-        var totalAmount = request.Quantity * request.UnitPrice;
+        // Tüm doğrulamalar ilk yazımdan önce: alış kaydedilip ödeme adımında hata alınırsa yeniden deneme stoğu iki kez artırırdı.
+        if (request.Quantity <= 0)
+        {
+            throw new ValidationAppException("Alış miktarı 0'dan büyük olmalı.");
+        }
+
+        if (request.UnitPrice < 0)
+        {
+            throw new ValidationAppException("Birim fiyat negatif olamaz.");
+        }
+
+        var totalAmount = MoneyMath.Round(request.Quantity * request.UnitPrice);
+        if (request.PaidAmount is > 0)
+        {
+            if (request.PaymentMethod is null)
+            {
+                throw new ValidationAppException("Alış anında ödeme için ödeme şekli seçilmeli.");
+            }
+
+            EnsurePaymentWithinDebt(request.PaidAmount.Value, totalAmount);
+        }
 
         var purchase = new SupplierPurchase
         {
@@ -111,7 +131,7 @@ public class SupplierService : ISupplierService
             UnitPrice = request.UnitPrice,
             TotalAmount = totalAmount,
             PurchaseDate = request.PurchaseDate,
-            IsFullyPaid = false,
+            IsFullyPaid = totalAmount == 0,
             CreatedByUserId = createdByUserId
         };
 
@@ -141,13 +161,8 @@ public class SupplierService : ISupplierService
         // Alış anında ödeme yapıldıysa aynı akıştan (kasa + otomatik gider) kaydedilir.
         if (request.PaidAmount is > 0)
         {
-            if (request.PaymentMethod is null)
-            {
-                throw new ValidationAppException("Alış anında ödeme için ödeme şekli seçilmeli.");
-            }
-
             return await AddPaymentAsync(businessId, purchase.Id,
-                new CreateSupplierPaymentRequest(request.PaidAmount.Value, request.PurchaseDate, request.PaymentMethod.Value, request.PaymentCardId), createdByUserId, ct);
+                new CreateSupplierPaymentRequest(request.PaidAmount.Value, request.PurchaseDate, request.PaymentMethod!.Value, request.PaymentCardId), createdByUserId, ct);
         }
 
         return await BuildPurchaseDtoAsync(businessId, purchase, ct);
@@ -155,54 +170,119 @@ public class SupplierService : ISupplierService
 
     public async Task<SupplierPurchaseDto> AddPaymentAsync(Guid businessId, Guid purchaseId, CreateSupplierPaymentRequest request, Guid createdByUserId, CancellationToken ct = default)
     {
-        var purchaseRepo = _unitOfWork.Repository<SupplierPurchase>();
-        var purchase = await purchaseRepo.GetByIdAsync(purchaseId, ct);
-        if (purchase is null || purchase.BusinessId != businessId)
-        {
-            throw new NotFoundException(nameof(SupplierPurchase), purchaseId);
-        }
+        var purchase = await GetTenantScopedPurchaseAsync(businessId, purchaseId, ct);
 
         if (request.Amount <= 0)
         {
             throw new ValidationAppException("Ödeme tutarı 0'dan büyük olmalı.");
         }
 
+        var paymentRepo = _unitOfWork.Repository<SupplierPayment>();
+        var alreadyPaid = (await paymentRepo.ListAsync(p => p.SupplierPurchaseId == purchase.Id, ct)).Sum(p => p.Amount);
+        EnsurePaymentWithinDebt(request.Amount, purchase.TotalAmount - alreadyPaid);
+
         var payment = new SupplierPayment
         {
             BusinessId = businessId,
             SupplierPurchaseId = purchase.Id,
-            Amount = request.Amount,
+            Amount = MoneyMath.Round(request.Amount),
             PaymentDate = request.PaymentDate,
             PaymentMethod = request.PaymentMethod,
             PaymentCardId = request.PaymentCardId,
             CreatedByUserId = createdByUserId
         };
-        await _unitOfWork.Repository<SupplierPayment>().AddAsync(payment, ct);
+        await paymentRepo.AddAsync(payment, ct);
 
         // Tedarikçiye ödenen para: kasadan/karttan düşen, raporlarda "Malzeme" görünen otomatik gider (bkz. 3.12, 3.15).
         var supplier = await _unitOfWork.Repository<Supplier>().GetByIdAsync(purchase.SupplierId, ct);
         var ingredient = await _unitOfWork.Repository<Ingredient>().GetByIdAsync(purchase.IngredientId, ct);
-        await _autoExpenses.UpsertAsync(new AutoExpenseSpec(
+        var expense = await _autoExpenses.UpsertAsync(new AutoExpenseSpec(
             businessId, PaymentSourceType, payment.Id, PaymentExpenseTypeName, ExpenseCategory.Material,
-            request.Amount, request.PaymentDate, request.PaymentMethod, request.PaymentCardId,
+            payment.Amount, request.PaymentDate, request.PaymentMethod, request.PaymentCardId,
             $"{supplier?.Name ?? "Tedarikçi"} — {ingredient?.Name ?? "alış"} ({purchase.PurchaseDate:dd.MM.yyyy} alışı) ödemesi (otomatik)",
             createdByUserId), ct);
+        payment.PaymentCardId = expense.PaymentCardId; // Kart doğrulaması (işletmeye ait, aktif) gider yazıcısında tek yerde yapılır.
+
+        purchase.IsFullyPaid = MoneyMath.Round(alreadyPaid + payment.Amount) >= purchase.TotalAmount;
+        purchase.UpdatedByUserId = createdByUserId;
+        purchase.UpdatedAtUtc = DateTime.UtcNow;
+        _unitOfWork.Repository<SupplierPurchase>().Update(purchase);
 
         await _unitOfWork.SaveChangesAsync(ct);
+        return await BuildPurchaseDtoAsync(businessId, purchase, ct);
+    }
 
-        var payments = await _unitOfWork.Repository<SupplierPayment>().ListAsync(p => p.SupplierPurchaseId == purchase.Id, ct);
-        var totalPaid = payments.Sum(p => p.Amount);
-
-        if (totalPaid >= purchase.TotalAmount && !purchase.IsFullyPaid)
+    /// <summary>Yanlış girilen ödeme geri alınır: otomatik gider ve kasa hareketi de silinir, alış yeniden "borçlu" olur.</summary>
+    public async Task<SupplierPurchaseDto> DeletePaymentAsync(Guid businessId, Guid purchaseId, Guid paymentId, Guid deletedByUserId, CancellationToken ct = default)
+    {
+        var purchase = await GetTenantScopedPurchaseAsync(businessId, purchaseId, ct);
+        var paymentRepo = _unitOfWork.Repository<SupplierPayment>();
+        var payment = await paymentRepo.GetByIdAsync(paymentId, ct);
+        if (payment is null || payment.SupplierPurchaseId != purchase.Id)
         {
-            purchase.IsFullyPaid = true;
-            purchase.UpdatedByUserId = createdByUserId;
-            purchase.UpdatedAtUtc = DateTime.UtcNow;
-            purchaseRepo.Update(purchase);
-            await _unitOfWork.SaveChangesAsync(ct);
+            throw new NotFoundException(nameof(SupplierPayment), paymentId);
         }
 
+        await _autoExpenses.RemoveAsync(businessId, PaymentSourceType, payment.Id, ct);
+        paymentRepo.Remove(payment);
+
+        purchase.IsFullyPaid = false;
+        purchase.UpdatedByUserId = deletedByUserId;
+        purchase.UpdatedAtUtc = DateTime.UtcNow;
+        _unitOfWork.Repository<SupplierPurchase>().Update(purchase);
+
+        await _unitOfWork.SaveChangesAsync(ct);
         return await BuildPurchaseDtoAsync(businessId, purchase, ct);
+    }
+
+    /// <summary>
+    /// Yanlış girilen alış geri alınır: stok girişi ters çevrilir. Ödemesi olan alış silinmez (önce ödemeler silinir);
+    /// böylece kasa/gider tarafında sahipsiz kayıt kalmaz. Malzemenin güncel birim fiyatı geri alınmaz (son bilinen fiyat kalır).
+    /// </summary>
+    public async Task DeletePurchaseAsync(Guid businessId, Guid purchaseId, Guid deletedByUserId, CancellationToken ct = default)
+    {
+        var purchase = await GetTenantScopedPurchaseAsync(businessId, purchaseId, ct);
+        DeletionGuard.EnsureNotUsed(
+            await _unitOfWork.Repository<SupplierPayment>().AnyAsync(p => p.SupplierPurchaseId == purchase.Id, ct),
+            "Bu alış", "ödeme kayıtlarında (önce ödemeleri silin)");
+
+        var movementRepo = _unitOfWork.Repository<StockMovement>();
+        foreach (var movement in await movementRepo.ListAsync(m => m.SourceReferenceType == nameof(SupplierPurchase) && m.SourceReferenceId == purchase.Id, ct))
+        {
+            movementRepo.Remove(movement);
+        }
+
+        var ingredientRepo = _unitOfWork.Repository<Ingredient>();
+        var ingredient = await ingredientRepo.GetByIdAsync(purchase.IngredientId, ct);
+        if (ingredient is not null)
+        {
+            ingredient.CurrentStockQuantity -= purchase.Quantity;
+            ingredient.UpdatedByUserId = deletedByUserId;
+            ingredient.UpdatedAtUtc = DateTime.UtcNow;
+            ingredientRepo.Update(ingredient);
+        }
+
+        _unitOfWork.Repository<SupplierPurchase>().Remove(purchase);
+        await _unitOfWork.SaveChangesAsync(ct);
+    }
+
+    private static void EnsurePaymentWithinDebt(decimal amount, decimal remaining)
+    {
+        if (MoneyMath.Round(amount) > MoneyMath.Round(remaining))
+        {
+            throw new ValidationAppException($"Ödeme kalan borçtan ({MoneyMath.Round(remaining):N2} ₺) fazla olamaz.");
+        }
+    }
+
+    private async Task<SupplierPurchase> GetTenantScopedPurchaseAsync(Guid businessId, Guid purchaseId, CancellationToken ct)
+    {
+        var purchase = await _unitOfWork.Repository<SupplierPurchase>().GetByIdAsync(purchaseId, ct);
+        if (purchase is null || purchase.BusinessId != businessId)
+        {
+            throw new NotFoundException(nameof(SupplierPurchase), purchaseId);
+        }
+
+        return purchase;
     }
 
     public async Task<decimal> GetTotalOutstandingDebtAsync(Guid businessId, CancellationToken ct = default)

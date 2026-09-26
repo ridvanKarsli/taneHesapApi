@@ -25,6 +25,12 @@ public interface ISupplierService
     /// <summary>Bir alışa ödeme ekler; toplam ödeme tutar toplamına ulaşınca alışı IsFullyPaid=true yapar.</summary>
     Task<SupplierPurchaseDto> AddPaymentAsync(Guid businessId, Guid purchaseId, CreateSupplierPaymentRequest request, Guid createdByUserId, CancellationToken ct = default);
 
+    /// <summary>Ödemeyi geri alır (otomatik gider + kasa hareketi silinir).</summary>
+    Task<SupplierPurchaseDto> DeletePaymentAsync(Guid businessId, Guid purchaseId, Guid paymentId, Guid deletedByUserId, CancellationToken ct = default);
+
+    /// <summary>Ödemesi olmayan alışı geri alır (stok girişi ters çevrilir).</summary>
+    Task DeletePurchaseAsync(Guid businessId, Guid purchaseId, Guid deletedByUserId, CancellationToken ct = default);
+
     /// <summary>Tüm tedarikçiler genelinde ödenmemiş toplam borç (raporlama için).</summary>
     Task<decimal> GetTotalOutstandingDebtAsync(Guid businessId, CancellationToken ct = default);
 }

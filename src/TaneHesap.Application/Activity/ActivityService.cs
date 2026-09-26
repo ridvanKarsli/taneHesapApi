@@ -78,9 +78,18 @@ public class ActivityService : IActivityService
         var userNames = (await _identityService.GetUsersByBusinessAsync(businessId)).ToDictionary(u => u.UserId, u => u.FullName);
         var kindLabels = Kinds.ToDictionary(k => k.EntityName, k => k.Label);
 
+        // İşletmeye "girmiş" SUPER_ADMIN işletme kullanıcısı değildir; adı ayrıca bulunur ve işaretlenir.
+        foreach (var userId in logs.Select(l => l.UserId).Distinct().Where(id => !userNames.ContainsKey(id)))
+        {
+            var outsider = await _identityService.GetByIdAsync(userId);
+            userNames[userId] = outsider is null
+                ? "Sistem / silinmiş kullanıcı"
+                : outsider.Role == UserRole.SuperAdmin ? $"{outsider.FullName} (süper yönetici)" : outsider.FullName;
+        }
+
         return logs
             .OrderByDescending(l => l.TimestampUtc)
-            .Select(l => ToEntry(l, userNames.GetValueOrDefault(l.UserId, "Sistem / silinmiş kullanıcı"), kindLabels[l.EntityName]))
+            .Select(l => ToEntry(l, userNames[l.UserId], kindLabels[l.EntityName]))
             .ToList();
     }
 

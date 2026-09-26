@@ -71,6 +71,19 @@ public class SuppliersController : ControllerBase
         return Ok(updated);
     }
 
+    [HttpDelete("purchases/{purchaseId:guid}/payments/{paymentId:guid}")]
+    [Authorize(Roles = "Admin")]
+    public async Task<ActionResult<SupplierPurchaseDto>> DeletePayment(Guid purchaseId, Guid paymentId, CancellationToken ct)
+        => Ok(await _supplierService.DeletePaymentAsync(BusinessId, purchaseId, paymentId, UserId, ct));
+
+    [HttpDelete("purchases/{purchaseId:guid}")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> DeletePurchase(Guid purchaseId, CancellationToken ct)
+    {
+        await _supplierService.DeletePurchaseAsync(BusinessId, purchaseId, UserId, ct);
+        return NoContent();
+    }
+
     [HttpDelete("{id:guid}")]
     [Authorize(Roles = "Admin")]
     public async Task<IActionResult> Delete(Guid id, CancellationToken ct)

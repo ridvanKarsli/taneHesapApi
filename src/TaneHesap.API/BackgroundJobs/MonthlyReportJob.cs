@@ -1,4 +1,5 @@
 using TaneHesap.API.Services;
+using TaneHesap.Application.Common;
 using TaneHesap.Application.Reports;
 
 namespace TaneHesap.API.BackgroundJobs;
@@ -48,7 +49,7 @@ public class MonthlyReportJob : BackgroundService
             scope.ServiceProvider.GetRequiredService<SystemExecutionScope>().EnterSystemMode();
 
             var service = scope.ServiceProvider.GetRequiredService<IMonthlyReportService>();
-            var closed = await service.CloseFinishedMonthsAsync(DateOnly.FromDateTime(DateTime.UtcNow), ct);
+            var closed = await service.CloseFinishedMonthsAsync(BusinessClock.Today, ct);
             if (closed > 0)
             {
                 _logger.LogInformation("{Count} işletme için aylık rapor kapatıldı ve bildirildi.", closed);

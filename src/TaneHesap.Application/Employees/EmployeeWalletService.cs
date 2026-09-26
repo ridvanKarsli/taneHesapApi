@@ -1,3 +1,4 @@
+using TaneHesap.Application.Common;
 using TaneHesap.Application.Common.Exceptions;
 using TaneHesap.Application.Common.Interfaces;
 using TaneHesap.Application.ExpenseTypes;
@@ -68,7 +69,7 @@ public class EmployeeWalletService : IEmployeeWalletService
             WorkDate = request.WorkDate,
             Hours = request.Hours,
             HourlyWage = hourlyWage,
-            Amount = Math.Round(request.Hours * hourlyWage, 2),
+            Amount = MoneyMath.Round(request.Hours * hourlyWage),
             Note = request.Note,
             CreatedByUserId = userId
         };

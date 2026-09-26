@@ -10,12 +10,14 @@ public class AutoExpenseWriter : IAutoExpenseWriter
     private readonly IUnitOfWork _unitOfWork;
     private readonly IExpenseTypeCatalog _typeCatalog;
     private readonly IExpenseTreasuryPoster _treasuryPoster;
+    private readonly IPaymentCardResolver _cardResolver;
 
-    public AutoExpenseWriter(IUnitOfWork unitOfWork, IExpenseTypeCatalog typeCatalog, IExpenseTreasuryPoster treasuryPoster)
+    public AutoExpenseWriter(IUnitOfWork unitOfWork, IExpenseTypeCatalog typeCatalog, IExpenseTreasuryPoster treasuryPoster, IPaymentCardResolver cardResolver)
     {
         _unitOfWork = unitOfWork;
         _typeCatalog = typeCatalog;
         _treasuryPoster = treasuryPoster;
+        _cardResolver = cardResolver;
     }
 
     public async Task<Expense> UpsertAsync(AutoExpenseSpec spec, CancellationToken ct = default)
@@ -48,7 +50,7 @@ public class AutoExpenseWriter : IAutoExpenseWriter
         expense.Amount = spec.Amount;
         expense.ExpenseDate = spec.Date;
         expense.PaymentMethod = spec.PaymentMethod;
-        expense.PaymentCardId = spec.PaymentCardId;
+        expense.PaymentCardId = await _cardResolver.ResolveAsync(spec.BusinessId, spec.PaymentMethod, spec.PaymentCardId, ct);
         expense.Description = spec.Description;
 
         await _treasuryPoster.SyncAsync(expense, ct);

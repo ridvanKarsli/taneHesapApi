@@ -20,6 +20,18 @@ public interface IAuthService
     /// </summary>
     Task<ServiceResult<LoginResponse>> RefreshTokenAsync(string refreshToken, string? ipAddress, CancellationToken ct = default);
 
+    /// <summary>
+    /// Geçerli refresh token ile yeni çift üretir; <paramref name="actingBusinessId"/> verildiyse ve kullanıcı SUPER_ADMIN ise
+    /// oturum o işletmenin sahibi (Admin) yetkisiyle sürer (işletme içi görünüm kalıcıdır).
+    /// </summary>
+    Task<ServiceResult<LoginResponse>> RefreshTokenAsync(string refreshToken, Guid? actingBusinessId, string? ipAddress, CancellationToken ct = default);
+
+    /// <summary>
+    /// SUPER_ADMIN bir işletmeye girer: aynı kullanıcı kimliğiyle (denetim kaydında kendisi görünür) ama
+    /// Admin rolü ve o işletmenin business_id'siyle token alır; kiracı filtresi o işletmeye kilitlenir.
+    /// </summary>
+    Task<ServiceResult<LoginResponse>> EnterBusinessAsync(Guid superAdminUserId, Guid businessId, string? ipAddress, CancellationToken ct = default);
+
     /// <summary>Çıkış / "tüm cihazlardan çıkış yap" senaryosunda refresh token'ı iptal eder.</summary>
     Task RevokeRefreshTokenAsync(string refreshToken, CancellationToken ct = default);
 

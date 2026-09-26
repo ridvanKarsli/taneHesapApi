@@ -40,7 +40,18 @@ public record ImportRowRequest(
     Guid? PlatformId,
     decimal? DiscountAmount);
 
-public record ImportDailySalesRequest(string FileName, List<ImportRowRequest> Rows);
+/// <summary>Aynı güne ikinci kez satış gelirse ne yapılacağı.</summary>
+public enum DailySalesImportMode
+{
+    /// <summary>Var olan kayıtların üzerine eklenir (elle tek tek giriş).</summary>
+    Append = 0,
+    /// <summary>O günlerde kayıt varsa 409 ile reddedilir — aynı dosyanın iki kez yüklenip günün iki kez sayılması engellenir.</summary>
+    RejectIfExists = 1,
+    /// <summary>O günlerin mevcut kayıtları silinip dosyadakiler yazılır (düzeltilmiş dosya yeniden yüklendi).</summary>
+    Replace = 2
+}
+
+public record ImportDailySalesRequest(string FileName, List<ImportRowRequest> Rows, DailySalesImportMode Mode = DailySalesImportMode.RejectIfExists);
 
 public record ImportDailySalesResult(Guid ImportLogId, int RowCount, int SuccessCount, int ErrorCount, List<string> Errors);
 

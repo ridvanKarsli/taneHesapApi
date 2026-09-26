@@ -1,4 +1,5 @@
 using System.Globalization;
+using TaneHesap.Application.Common;
 using TaneHesap.Application.Common.Interfaces;
 using TaneHesap.Application.Notifications;
 using TaneHesap.Domain.Entities;
@@ -44,7 +45,7 @@ public class MonthlyReportService : IMonthlyReportService
 
         return new MonthlyReportDto(
             year, month, current.Revenue, current.Expense, current.Revenue - current.Expense, current.PlatesSold,
-            current.CostPerPlate, current.PlatesSold == 0 ? 0 : Math.Round(current.Revenue / current.PlatesSold, 2),
+            current.CostPerPlate, current.PlatesSold == 0 ? 0 : MoneyMath.Round(current.Revenue / current.PlatesSold),
             previous.CostPerPlate, efficiency, warnings, closed?.GeneratedAtUtc);
     }
 
@@ -112,8 +113,8 @@ public class MonthlyReportService : IMonthlyReportService
     {
         var qty = current.QuantityUsedByIngredient.GetValueOrDefault(id);
         var prevQty = previous.QuantityUsedByIngredient.GetValueOrDefault(id);
-        var perUnit = qty > 0 ? Math.Round(current.Revenue / qty, 2) : 0;
-        var prevPerUnit = prevQty > 0 ? Math.Round(previous.Revenue / prevQty, 2) : 0;
+        var perUnit = qty > 0 ? MoneyMath.Round(current.Revenue / qty) : 0;
+        var prevPerUnit = prevQty > 0 ? MoneyMath.Round(previous.Revenue / prevQty) : 0;
         decimal? change = prevPerUnit > 0 && qty > 0 ? Math.Round((perUnit - prevPerUnit) / prevPerUnit * 100m, 1) : null;
         var isWarning = change.HasValue && change.Value <= -WarningDropPercent;
 
@@ -138,7 +139,7 @@ public class MonthlyReportService : IMonthlyReportService
         var plates = sales.Sum(s => s.Quantity);
         var used = movements.GroupBy(m => m.IngredientId).ToDictionary(g => g.Key, g => -g.Sum(m => m.QuantityChange));
 
-        return new MonthFigures(revenue, expense, plates, plates == 0 ? 0 : Math.Round(expense / plates, 2), used);
+        return new MonthFigures(revenue, expense, plates, plates == 0 ? 0 : MoneyMath.Round(expense / plates), used);
     }
 
     private sealed record MonthFigures(decimal Revenue, decimal Expense, int PlatesSold, decimal CostPerPlate, Dictionary<Guid, decimal> QuantityUsedByIngredient);

@@ -48,6 +48,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IPlatformService, PlatformService>();
         services.AddScoped<ITreasuryService, TreasuryService>();
         services.AddScoped<IExpenseTreasuryPoster, ExpenseTreasuryPoster>();
+        services.AddScoped<IPaymentCardResolver, PaymentCardResolver>();
         services.AddScoped<IExpectedConsumptionCalculator, ExpectedConsumptionCalculator>();
         // Satış verisi değişince yeniden hesaplanan türetilmiş kayıtlar — sırayla çağrılır (bkz. IDailySalesSideEffect).
         services.AddScoped<IDailySalesSideEffect, PlatformCommissionExpensePoster>();

@@ -1,4 +1,5 @@
 using System.Globalization;
+using TaneHesap.Application.Common;
 using TaneHesap.Application.Common.Interfaces;
 using TaneHesap.Application.Notifications;
 using TaneHesap.Domain.Entities;
@@ -68,7 +69,11 @@ public class RecurringExpenseReminderService : IRecurringExpenseReminderService
     }
 
     /// <summary>Mesaj dönem tarihlerini içerdiği için aynı dönemin tekrar bildirilmesini önleyen anahtar olarak da kullanılır.</summary>
-    private static string BuildMessage(RecurringExpenseDto item) =>
-        $"'{item.Name}' düzenli gideri ödenmedi: {item.CurrentPeriodStartDate.ToString("dd.MM.yyyy", Tr)} – " +
-        $"{item.CurrentPeriodEndDate.ToString("dd.MM.yyyy", Tr)} dönemi, {item.Amount.ToString("N2", Tr)} ₺.";
+    private static string BuildMessage(RecurringExpenseDto item)
+    {
+        var overdue = item.CurrentPeriodEndDate < BusinessClock.Today;
+        return $"'{item.Name}' düzenli gideri {(overdue ? "gecikti, hâlâ ödenmedi" : "ödenmedi")}: " +
+               $"{item.CurrentPeriodStartDate.ToString("dd.MM.yyyy", Tr)} – {item.CurrentPeriodEndDate.ToString("dd.MM.yyyy", Tr)} dönemi, " +
+               $"{item.Amount.ToString("N2", Tr)} ₺.";
+    }
 }

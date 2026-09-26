@@ -40,11 +40,25 @@ public class StockMovementService : IStockMovementService
             throw new NotFoundException(nameof(Ingredient), request.IngredientId);
         }
 
+        // Elle yalnızca sayım düzeltmesi ve fire girilir; alış tedarikçiden, satış tüketimi satıştan gelir.
+        if (request.MovementType is not (StockMovementType.ManualAdjustment or StockMovementType.Waste))
+        {
+            throw new ValidationAppException("Elle yalnızca sayım düzeltmesi veya fire girilebilir; alış Tedarikçiler'den, satış tüketimi satış girişinden oluşur.");
+        }
+
+        if (request.QuantityChange == 0)
+        {
+            throw new ValidationAppException("Miktar 0 olamaz.");
+        }
+
+        // Fire her zaman stoğu azaltır; kullanıcı pozitif girdiyse işaret düzeltilir.
+        var quantityChange = request.MovementType == StockMovementType.Waste ? -Math.Abs(request.QuantityChange) : request.QuantityChange;
+
         var movement = new StockMovement
         {
             BusinessId = businessId,
             IngredientId = ingredient.Id,
-            QuantityChange = request.QuantityChange,
+            QuantityChange = quantityChange,
             MovementType = request.MovementType,
             MovementDateUtc = DateTime.UtcNow,
             Note = request.Note,
@@ -53,7 +67,7 @@ public class StockMovementService : IStockMovementService
 
         await _unitOfWork.Repository<StockMovement>().AddAsync(movement, ct);
 
-        ingredient.CurrentStockQuantity += request.QuantityChange;
+        ingredient.CurrentStockQuantity += quantityChange;
         ingredient.UpdatedByUserId = createdByUserId;
         ingredient.UpdatedAtUtc = DateTime.UtcNow;
         ingredientRepo.Update(ingredient);
@@ -78,9 +92,10 @@ public class StockMovementService : IStockMovementService
             throw new NotFoundException(nameof(StockMovement), id);
         }
 
-        if (movement.MovementType is not (StockMovementType.ManualAdjustment or StockMovementType.Waste))
+        // Bir kaynaktan (satış, alış, gün sonu kapanışı) üretilen hareketler kaynağından düzeltilir; aksi halde stok ile rapor ayrışır.
+        if (movement.SourceReferenceType is not null || movement.MovementType is not (StockMovementType.ManualAdjustment or StockMovementType.Waste))
         {
-            throw new ConflictAppException("Alış ve satış tüketimi hareketleri buradan silinemez; tedarikçi alışı veya gün sonu kapanışı üzerinden düzeltilir.");
+            throw new ConflictAppException("Bu hareket bir kayıttan üretildi (satış, tedarikçi alışı veya gün sonu kapanışı); o kayıt üzerinden düzeltilir.");
         }
 
         var ingredientRepo = _unitOfWork.Repository<Ingredient>();

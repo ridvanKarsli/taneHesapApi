@@ -265,11 +265,13 @@ public class DailyClosingService : IDailyClosingService
         report.GeneratedAtUtc = DateTime.UtcNow;
         await _unitOfWork.SaveChangesAsync(ct);
 
+        // Sayımda girilmeyen malzeme "sayılmadı" demektir, "hiç tüketilmedi" değil: rapor onu beklenen = gerçek sayar
+        // (stokta da yalnızca beklenen düşüm kalır). Aksi halde girilmeyen her malzeme sahte bir "tasarruf" gösterirdi.
         var actualByIngredient = actualItems.ToDictionary(i => i.IngredientId, i => i.ActualQuantityUsed);
         foreach (var ingredientId in expected.Keys.Union(actualByIngredient.Keys))
         {
             var expectedQty = expected.GetValueOrDefault(ingredientId);
-            var actualQty = actualByIngredient.GetValueOrDefault(ingredientId);
+            var actualQty = actualByIngredient.TryGetValue(ingredientId, out var counted) ? counted : expectedQty;
             var unitPrice = ingredientsById.TryGetValue(ingredientId, out var ing) ? ing.CurrentUnitPrice : 0;
             await itemRepo.AddAsync(new DailyLossReportItem
             {

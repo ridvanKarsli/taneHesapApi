@@ -39,6 +39,10 @@ public static class DependencyInjection
                 options.Password.RequiredLength = 8;
                 options.Password.RequireNonAlphanumeric = false;
                 options.User.RequireUniqueEmail = false;
+                // Kaba kuvvet koruması: 5 hatalı denemede 15 dakika kilit (IdentityService.ValidatePasswordAsync uygular).
+                options.Lockout.AllowedForNewUsers = true;
+                options.Lockout.MaxFailedAccessAttempts = 5;
+                options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(15);
             })
             .AddRoles<IdentityRole<Guid>>()
             .AddEntityFrameworkStores<ApplicationDbContext>()

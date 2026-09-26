@@ -42,7 +42,7 @@ public class CardFeeExpensePoster : IDailySalesSideEffect
         foreach (var date in dates)
         {
             var sourceId = DeterministicGuid.From(SourceType, businessId, date);
-            var fee = Math.Round(cardSales.Where(s => s.SaleDate == date).Sum(s => s.TotalAmount) * feePercent / 100m, 2);
+            var fee = MoneyMath.Round(cardSales.Where(s => s.SaleDate == date).Sum(s => s.TotalAmount) * feePercent / 100m);
             if (fee <= 0)
             {
                 await _autoExpenses.RemoveAsync(businessId, SourceType, sourceId, ct);

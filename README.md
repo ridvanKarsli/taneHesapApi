@@ -65,8 +65,9 @@ SUPER_ADMIN de otomatik oluşturulabilir — ama güvenlik gereği kimlik bilgil
    açılışta sistemde hiç SUPER_ADMIN yoksa ve bu iki değer tanımlıysa otomatik olarak ilk
    SUPER_ADMIN'i oluşturur; zaten bir SUPER_ADMIN varsa veya değerler boşsa hiçbir şey yapmaz
    (idempotent — her açılışta güvenle çalışır, tekrar tekrar kullanıcı oluşturmaz).
-3. İlk girişte TOTP kurulumu gerekir (`POST /api/auth/totp-setup` — bkz. AuthController); SUPER_ADMIN
-   ve ADMIN için 2FA zorunludur (bkz. bölüm 2).
+3. Giriş yalnızca kullanıcı adı + şifre iledir (2FA kaldırıldı). Üst üste 5 hatalı denemede hesap 15 dk
+   kilitlenir (Identity Lockout; `IdentityService.ValidatePasswordAsync`). Pasif işletmenin kullanıcıları
+   giriş yapamaz ve oturum yenileyemez (`AuthService.IsBusinessUsableAsync`).
 4. Güvenlik için ilk kurulumdan sonra `InitialSuperAdmin:Username/Password` değerlerini ortamdan
    kaldırmanız önerilir — seeder zaten bir SUPER_ADMIN varken hiçbir şey yapmaz, ama gereksiz yere
    bir şifrenin ortam değişkeninde durması iyi bir pratik değildir.
@@ -218,6 +219,37 @@ dotnet ef database update --project src/TaneHesap.Infrastructure --startup-proje
 ```
 
 Railway `Database__MigrateOnStartup=true` olduğu için `main`'e push sonrası üretimde otomatik uygulanır.
+
+## Üretim dayanıklılığı (prod denetimi sonrası)
+
+- **Tek transaction:** `Filters/TransactionActionFilter` POST/PUT/PATCH/DELETE isteklerini tek veritabanı
+  işleminde çalıştırır. Satış girişi → stok → kasa → otomatik gider → kapanış gibi çok adımlı akışlarda bir
+  adım patlarsa öncekiler geri alınır; Identity (UserManager) aynı DbContext'i kullandığı için çalışan
+  oluşturma da atomiktir. Hata yine `ExceptionHandlingMiddleware`'e ulaşır (404/403/400/409/500).
+- **Sağlık ucu:** `GET /health` (anonim) — Railway healthcheck için.
+- **Süper yönetici işletmeye girer:** `POST /api/auth/enter-business { businessId }` (yalnızca SuperAdmin)
+  aynı kullanıcı kimliğiyle ama **Admin rolü + o işletmenin business_id**'siyle token verir; kiracı
+  filtresi o işletmeye kilitlenir, denetim kaydında süper yönetici görünür (İşlem Geçmişi "… (süper
+  yönetici)" yazar). Görünüm kalıcıdır: `POST /api/auth/refresh { refreshToken, actingBusinessId }`.
+  Çıkış: `actingBusinessId` olmadan refresh. `LoginResponse` artık `businessName` ve `isActingAsBusiness`
+  taşır.
+- **Çift içe aktarma koruması:** `POST /api/daily-sales/import` `mode` alır — `RejectIfExists` (dosya
+  varsayılanı: o günlerde kayıt varsa 409), `Replace` (o günlerin kayıtları silinip yeniden yazılır),
+  `Append` (elle tek tek giriş). Aynı dosya iki kez yüklenince günün gelir/kasa/stoğu iki kez sayılmaz.
+- **Tedarikçi düzeltmeleri:** `DELETE /api/suppliers/purchases/{id}/payments/{paymentId}` ödemeyi (otomatik
+  gider + kasa hareketiyle) geri alır; `DELETE /api/suppliers/purchases/{id}` ödemesi olmayan alışı stok
+  girişini ters çevirerek siler. Ödeme kalan borcu aşamaz; alış tutarı 2 basamağa yuvarlanır.
+- **Para yuvarlama:** `Common/MoneyMath.Round` (2 basamak, AwayFromZero) — komisyon, kart komisyonu,
+  çalışan hak edişi, tabak maliyeti hepsi aynı kuralı kullanır.
+- **Kart doğrulama tek yerde:** `Treasury/IPaymentCardResolver` — elle gider, tedarikçi ödemesi ve düzenli
+  gider ödemesi aynı kuraldan geçer (kart zorunlu, işletmeye ait, aktif).
+- **Stok hareketi kuralları:** elle yalnızca sayım düzeltmesi/fire girilir; fire daima negatiftir;
+  bir kaynaktan (satış, alış, kapanış) üretilen hareket elle silinemez.
+- **Düzenli gider dönemleri:** dönemler indeks tabanlı hesaplanır (31 Ocak → 28 Şubat → 31 Mart arasında
+  boşluk kalmaz); hatırlatma dönem bitimine 3 gün kala ve bir önceki dönem ödenmediyse (gecikmiş) gelir.
+- **Türkiye tarihi:** `Common/BusinessClock.Today` (Europe/Istanbul) — düzenli gider dönemi, hatırlatma ve ay
+  kapanışı UTC yerine yerel tarihi kullanır.
+- **Gün sonu sayımı:** sayılmayan malzeme raporda "beklenen = gerçek" kabul edilir (sahte tasarruf yok).
 
 ## Arka plan görevleri
 

@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using TaneHesap.Application.Common.Exceptions;
 using TaneHesap.Application.Common.Interfaces;
 using TaneHesap.Domain.Enums;
 using TaneHesap.Infrastructure.Identity;
@@ -86,17 +87,26 @@ public class IdentityService : IIdentityService
 
         if (!string.IsNullOrWhiteSpace(username) && username != user.UserName)
         {
-            await _userManager.SetUserNameAsync(user, username);
+            EnsureSucceeded(await _userManager.SetUserNameAsync(user, username));
         }
 
         if (!string.IsNullOrWhiteSpace(newPassword))
         {
             var token = await _userManager.GeneratePasswordResetTokenAsync(user);
-            await _userManager.ResetPasswordAsync(user, token, newPassword);
+            EnsureSucceeded(await _userManager.ResetPasswordAsync(user, token, newPassword));
         }
 
-        await _userManager.UpdateAsync(user);
+        EnsureSucceeded(await _userManager.UpdateAsync(user));
         return true;
+    }
+
+    /// <summary>Identity hataları (kullanıcı adı çakışması, zayıf şifre) sessizce yutulmaz; kullanıcıya 400 olarak döner.</summary>
+    private static void EnsureSucceeded(IdentityResult result)
+    {
+        if (!result.Succeeded)
+        {
+            throw new ValidationAppException(string.Join(" ", result.Errors.Select(e => e.Description)));
+        }
     }
 
     public async Task<bool> SetActiveAsync(Guid userId, bool isActive)
@@ -136,8 +146,21 @@ public class IdentityService : IIdentityService
             return null;
         }
 
+        // Kaba kuvvet koruması: üst üste hatalı denemede hesap geçici olarak kilitlenir (bkz. DependencyInjection Lockout).
+        if (await _userManager.IsLockedOutAsync(user))
+        {
+            return null;
+        }
+
         var isValid = await _userManager.CheckPasswordAsync(user, password);
-        return isValid ? ToInfo(user) : null;
+        if (!isValid)
+        {
+            await _userManager.AccessFailedAsync(user);
+            return null;
+        }
+
+        await _userManager.ResetAccessFailedCountAsync(user);
+        return ToInfo(user);
     }
 
     public async Task<ApplicationUserInfo?> GetByIdAsync(Guid userId)

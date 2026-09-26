@@ -48,7 +48,7 @@ public class PlatformCommissionExpensePoster : IDailySalesSideEffect
             {
                 var sourceId = DeterministicGuid.From(SourceType, platform.Id, date);
                 var commission = grossByPlatformAndDate.TryGetValue((platform.Id, date), out var gross)
-                    ? Math.Round(gross * platform.CommissionPercentage / 100m, 2)
+                    ? MoneyMath.Round(gross * platform.CommissionPercentage / 100m)
                     : 0m;
 
                 if (commission <= 0)

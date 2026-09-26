@@ -24,9 +24,22 @@ public class ExceptionHandlingMiddleware
         {
             await _next(context);
         }
+        catch (OperationCanceledException) when (context.RequestAborted.IsCancellationRequested)
+        {
+            // İstemci isteği iptal etti (sayfa değişti vb.) — hata değildir, 499 ile sessizce kapatılır.
+            if (!context.Response.HasStarted)
+            {
+                context.Response.StatusCode = 499;
+            }
+        }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "İşlenmeyen hata: {Message}", ex.Message);
+            _logger.LogError(ex, "İşlenmeyen hata: {Method} {Path} — {Message}", context.Request.Method, context.Request.Path, ex.Message);
+            if (context.Response.HasStarted)
+            {
+                throw; // Yanıt başladıysa gövde artık değiştirilemez; sunucu bağlantıyı kapatır.
+            }
+
             await HandleExceptionAsync(context, ex);
         }
     }

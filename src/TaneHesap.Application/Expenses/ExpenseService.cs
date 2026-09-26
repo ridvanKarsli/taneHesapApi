@@ -11,12 +11,14 @@ public class ExpenseService : IExpenseService
     private readonly IUnitOfWork _unitOfWork;
     private readonly IIdentityService _identityService;
     private readonly IExpenseTreasuryPoster _treasuryPoster;
+    private readonly IPaymentCardResolver _cardResolver;
 
-    public ExpenseService(IUnitOfWork unitOfWork, IIdentityService identityService, IExpenseTreasuryPoster treasuryPoster)
+    public ExpenseService(IUnitOfWork unitOfWork, IIdentityService identityService, IExpenseTreasuryPoster treasuryPoster, IPaymentCardResolver cardResolver)
     {
         _unitOfWork = unitOfWork;
         _identityService = identityService;
         _treasuryPoster = treasuryPoster;
+        _cardResolver = cardResolver;
     }
 
     public async Task<List<ExpenseDto>> GetListAsync(Guid businessId, ExpenseListFilter filter, CancellationToken ct = default)
@@ -100,36 +102,11 @@ public class ExpenseService : IExpenseService
         expense.Quantity = quantity;
         expense.ExpenseDate = date;
         expense.PaymentMethod = paymentMethod;
-        expense.PaymentCardId = await ResolveCardAsync(expense.BusinessId, paymentMethod, paymentCardId, ct);
+        expense.PaymentCardId = await _cardResolver.ResolveAsync(expense.BusinessId, paymentMethod, paymentCardId, ct);
         expense.EmployeeUserId = await ResolveEmployeeAsync(expense.BusinessId, expenseType, employeeUserId, ct);
         expense.Description = description;
     }
 
-    private async Task<Guid?> ResolveCardAsync(Guid businessId, PaymentMethod? paymentMethod, Guid? paymentCardId, CancellationToken ct)
-    {
-        if (paymentMethod != PaymentMethod.Card)
-        {
-            return null;
-        }
-
-        if (paymentCardId is null)
-        {
-            throw new ValidationAppException("Kartla ödenen gider için hangi karttan ödendiği seçilmeli.");
-        }
-
-        var card = await _unitOfWork.Repository<PaymentCard>().GetByIdAsync(paymentCardId.Value, ct);
-        if (card is null || card.BusinessId != businessId)
-        {
-            throw new NotFoundException(nameof(PaymentCard), paymentCardId.Value);
-        }
-
-        if (!card.IsActive)
-        {
-            throw new ValidationAppException($"'{card.Name}' kartı pasif; gider bu karta yazılamaz.");
-        }
-
-        return card.Id;
-    }
 
     private async Task<Guid?> ResolveEmployeeAsync(Guid businessId, ExpenseType expenseType, Guid? employeeUserId, CancellationToken ct)
     {
