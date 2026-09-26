@@ -33,6 +33,11 @@ public class RecurringExpensesController : ControllerBase
     public async Task<ActionResult<List<RecurringExpenseDto>>> GetDueForReminder(CancellationToken ct)
         => Ok(await _recurringExpenseService.GetDueForReminderAsync(BusinessId, ct));
 
+    /// <summary>Ödenecekler: gecikmiş önceki dönem + içinde bulunulan dönem (ödenmemişler). Ödenince listeden çıkar.</summary>
+    [HttpGet("payables")]
+    public async Task<ActionResult<List<RecurringPayableDto>>> GetPayables(CancellationToken ct)
+        => Ok(await _recurringExpenseService.GetPayablesAsync(BusinessId, ct));
+
     [HttpGet("{id:guid}")]
     public async Task<ActionResult<RecurringExpenseDto>> GetById(Guid id, CancellationToken ct)
         => Ok(await _recurringExpenseService.GetByIdAsync(BusinessId, id, ct));

@@ -104,6 +104,9 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, IdentityR
             .HasOne(x => x.SupplierPurchase).WithMany(x => x.Payments)
             .HasForeignKey(x => x.SupplierPurchaseId).OnDelete(DeleteBehavior.Cascade);
 
+        // Mevcut kayıtlar migration'da "her 1 periyotta bir" olur.
+        builder.Entity<RecurringExpense>().Property(x => x.IntervalCount).HasDefaultValue(1);
+
         builder.Entity<RecurringExpensePayment>()
             .HasOne(x => x.RecurringExpense).WithMany(x => x.Payments)
             .HasForeignKey(x => x.RecurringExpenseId).OnDelete(DeleteBehavior.Cascade);

@@ -9,7 +9,11 @@ public record CreateWorkLogRequest(DateOnly WorkDate, decimal Hours, string? Not
 /// <summary>Çalışana yapılan ödeme — aslında Personnel kategorisinde bir Expense kaydıdır (Giderler'den de görünür/silinir).</summary>
 public record EmployeePaymentDto(Guid ExpenseId, DateOnly Date, decimal Amount, PaymentMethod? PaymentMethod, string? PaymentCardName, string? Description);
 
-public record CreateEmployeePaymentRequest(decimal Amount, DateOnly Date, PaymentMethod PaymentMethod, Guid? PaymentCardId, string? Note);
+/// <summary>
+/// Ödeme ya tutar (<paramref name="Amount"/>) ya da saat (<paramref name="Hours"/>) olarak girilir — ikisinden biri.
+/// Saat verilirse tutar sunucuda saat × çalışanın saatlik ücreti olarak hesaplanır.
+/// </summary>
+public record CreateEmployeePaymentRequest(decimal? Amount, DateOnly Date, PaymentMethod PaymentMethod, Guid? PaymentCardId, string? Note, decimal? Hours = null);
 
 /// <summary>
 /// Çalışanın cüzdanı: Σ hak ediş (çalışma saati × saatlik ücret) − Σ ödeme = bakiye (işletmenin çalışana borcu).

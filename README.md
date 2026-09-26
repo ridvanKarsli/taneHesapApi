@@ -251,6 +251,25 @@ Railway `Database__MigrateOnStartup=true` olduğu için `main`'e push sonrası �
   kapanışı UTC yerine yerel tarihi kullanır.
 - **Gün sonu sayımı:** sayılmayan malzeme raporda "beklenen = gerçek" kabul edilir (sahte tasarruf yok).
 
+## Satış kaynakları, düzenli gider periyotları, saatle ödeme (şema değişikliği — migration gerekir)
+
+- **Satışlar yalnızca Excel:** Kasa, Yemeksepeti ve Uber dosyaları ayrı ayrı yüklenir (frontend
+  `lib/salesSources.ts`, kaynak başına ayrıştırıcı). Çift yükleme koruması kaynak bazındadır: aynı gün + aynı
+  kanal + aynı platformda kayıt varsa `RejectIfExists` 409 döner, `Replace` o kayıtları yeniler.
+- **Düzenli gider periyodu serbest:** `RecurringExpense.IntervalCount` (Monthly + 3 = 3 ayda bir). Dönem hesabı
+  `RecurringSchedule` (saf, test edilebilir). `GET /api/recurring-expenses/payables` ödenmemiş dönemleri
+  (gecikmiş önceki + içinde bulunulan) döner; ödeme `mark-period-paid` ile, ödenen listeden çıkar.
+- **Çalışana saatle ödeme:** `POST /api/employees/{id}/payments` `amount` **veya** `hours` alır; saat verilirse
+  tutar = saat × saatlik ücret (sunucuda), saat giderin miktar alanında saklanır.
+- **Aylık rapor yalnızca biten ay için:** içinde bulunulan ay `isFinal: false` döner (genel maliyet ay içinde
+  yanıltıcıdır).
+
+Migration (Rıdvan'ın makinesinde):
+
+```bash
+dotnet ef migrations add RecurringIntervalCount --project src/TaneHesap.Infrastructure --startup-project src/TaneHesap.API
+```
+
 ## Arka plan görevleri
 
 `BackgroundJobs/RecurringExpenseReminderJob` açılıştan 1 dk sonra ve her 6 saatte bir, dönemi bitmiş

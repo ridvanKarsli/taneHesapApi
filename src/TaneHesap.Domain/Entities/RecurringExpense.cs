@@ -18,6 +18,9 @@ public class RecurringExpense : BaseEntity, ITenantEntity
 
     public RecurringPeriod Period { get; set; }
 
+    /// <summary>Kaç periyotta bir: Monthly + 3 = "3 ayda bir", Weekly + 2 = "2 haftada bir". En az 1.</summary>
+    public int IntervalCount { get; set; } = 1;
+
     public DateOnly StartDate { get; set; }
 
     public bool IsActive { get; set; } = true;

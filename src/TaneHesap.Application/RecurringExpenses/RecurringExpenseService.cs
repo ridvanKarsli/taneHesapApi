@@ -38,12 +38,14 @@ public class RecurringExpenseService : IRecurringExpenseService
 
     public async Task<RecurringExpenseDto> CreateAsync(Guid businessId, CreateRecurringExpenseRequest request, Guid createdByUserId, CancellationToken ct = default)
     {
+        Validate(request.Name, request.Amount, request.IntervalCount);
         var entity = new RecurringExpense
         {
             BusinessId = businessId,
-            Name = request.Name,
+            Name = request.Name.Trim(),
             Amount = request.Amount,
             Period = request.Period,
+            IntervalCount = request.IntervalCount,
             StartDate = request.StartDate,
             IsActive = true,
             CreatedByUserId = createdByUserId
@@ -60,9 +62,11 @@ public class RecurringExpenseService : IRecurringExpenseService
         var repo = _unitOfWork.Repository<RecurringExpense>();
         var entity = await GetTenantScopedAsync(businessId, id, ct);
 
-        entity.Name = request.Name;
+        Validate(request.Name, request.Amount, request.IntervalCount);
+        entity.Name = request.Name.Trim();
         entity.Amount = request.Amount;
         entity.Period = request.Period;
+        entity.IntervalCount = request.IntervalCount;
         entity.IsActive = request.IsActive;
         entity.UpdatedByUserId = updatedByUserId;
         entity.UpdatedAtUtc = DateTime.UtcNow;
@@ -149,25 +153,78 @@ public class RecurringExpenseService : IRecurringExpenseService
 
         foreach (var item in items)
         {
-            var index = PeriodIndexAt(item.StartDate, item.Period, today);
-            var (start, end) = ComputePeriod(item.StartDate, item.Period, index);
-
-            if (index > 0)
+            foreach (var (start, end, isOverdue) in await UnpaidPeriodsAsync(item, today, ct))
             {
-                var (previousStart, previousEnd) = ComputePeriod(item.StartDate, item.Period, index - 1);
-                if (!await IsPeriodPaidAsync(item.Id, previousStart, ct))
+                if (isOverdue || end.DayNumber - today.DayNumber <= ReminderLeadDays)
                 {
-                    result.Add(ToDto(item, previousStart, previousEnd, isPaid: false));
+                    result.Add(ToDto(item, start, end, isPaid: false));
                 }
-            }
-
-            if (end.DayNumber - today.DayNumber <= ReminderLeadDays && !await IsPeriodPaidAsync(item.Id, start, ct))
-            {
-                result.Add(ToDto(item, start, end, isPaid: false));
             }
         }
 
         return result;
+    }
+
+    public async Task<List<RecurringPayableDto>> GetPayablesAsync(Guid businessId, CancellationToken ct = default)
+    {
+        var items = await _unitOfWork.Repository<RecurringExpense>().ListAsync(r => r.BusinessId == businessId && r.IsActive, ct);
+        var today = BusinessClock.Today;
+        var result = new List<RecurringPayableDto>();
+
+        foreach (var item in items)
+        {
+            foreach (var (start, end, isOverdue) in await UnpaidPeriodsAsync(item, today, ct))
+            {
+                result.Add(new RecurringPayableDto(item.Id, item.Name, item.Amount, item.Period, item.IntervalCount, start, end, isOverdue));
+            }
+        }
+
+        return result.OrderByDescending(p => p.IsOverdue).ThenBy(p => p.PeriodEndDate).ThenBy(p => p.Name).ToList();
+    }
+
+    /// <summary>Ödenmemiş dönemler: bir önceki dönem (gecikmiş) ve içinde bulunulan dönem. Başlangıçtan önce dönem yoktur.</summary>
+    private async Task<List<(DateOnly Start, DateOnly End, bool IsOverdue)>> UnpaidPeriodsAsync(RecurringExpense item, DateOnly today, CancellationToken ct)
+    {
+        var schedule = ScheduleOf(item);
+        var index = schedule.IndexAt(today);
+        var unpaid = new List<(DateOnly, DateOnly, bool)>();
+
+        if (index > 0)
+        {
+            var (previousStart, previousEnd) = schedule.PeriodAt(index - 1);
+            if (!await IsPeriodPaidAsync(item.Id, previousStart, ct))
+            {
+                unpaid.Add((previousStart, previousEnd, true));
+            }
+        }
+
+        var (start, end) = schedule.PeriodAt(index);
+        if (start <= today && !await IsPeriodPaidAsync(item.Id, start, ct))
+        {
+            unpaid.Add((start, end, false));
+        }
+
+        return unpaid;
+    }
+
+    private static RecurringSchedule ScheduleOf(RecurringExpense item) => new(item.StartDate, item.Period, item.IntervalCount);
+
+    private static void Validate(string name, decimal amount, int intervalCount)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            throw new ValidationAppException("Düzenli giderin adı boş olamaz.");
+        }
+
+        if (amount <= 0)
+        {
+            throw new ValidationAppException("Tutar 0'dan büyük olmalı.");
+        }
+
+        if (intervalCount is < 1 or > RecurringSchedule.MaxIntervalCount)
+        {
+            throw new ValidationAppException($"Periyot 1 ile {RecurringSchedule.MaxIntervalCount} arasında olmalı (örn. 3 ayda bir).");
+        }
     }
 
     public async Task DeleteAsync(Guid businessId, Guid id, CancellationToken ct = default)
@@ -194,8 +251,7 @@ public class RecurringExpenseService : IRecurringExpenseService
 
     private async Task<RecurringExpenseDto> BuildDtoAsync(RecurringExpense entity, CancellationToken ct)
     {
-        var today = BusinessClock.Today;
-        var (periodStart, periodEnd) = ComputeCurrentPeriod(entity.StartDate, entity.Period, today);
+        var (periodStart, periodEnd) = ScheduleOf(entity).PeriodContaining(BusinessClock.Today);
         return ToDto(entity, periodStart, periodEnd, await IsPeriodPaidAsync(entity.Id, periodStart, ct));
     }
 
@@ -204,47 +260,5 @@ public class RecurringExpenseService : IRecurringExpenseService
             .AnyAsync(p => p.RecurringExpenseId == recurringExpenseId && p.PeriodStartDate == periodStart && p.IsPaid, ct);
 
     private static RecurringExpenseDto ToDto(RecurringExpense entity, DateOnly periodStart, DateOnly periodEnd, bool isPaid) =>
-        new(entity.Id, entity.Name, entity.Amount, entity.Period, entity.StartDate, entity.IsActive, periodStart, periodEnd, isPaid);
-
-    /// <summary>
-    /// Dönemler başlangıç tarihinden itibaren k'ıncı kaydırmayla tanımlanır: başlangıç = Shift(k), bitiş = Shift(k+1) − 1 gün.
-    /// Böylece ay sonu başlangıçlarında (31 Ocak → 28 Şubat → 31 Mart) dönemler arasında boşluk kalmaz.
-    /// </summary>
-    private static (DateOnly Start, DateOnly End) ComputeCurrentPeriod(DateOnly startDate, RecurringPeriod period, DateOnly asOf)
-        => ComputePeriod(startDate, period, PeriodIndexAt(startDate, period, asOf));
-
-    private static (DateOnly Start, DateOnly End) ComputePeriod(DateOnly startDate, RecurringPeriod period, int index)
-        => (Shift(startDate, period, index), Shift(startDate, period, index + 1).AddDays(-1));
-
-    private static int PeriodIndexAt(DateOnly startDate, RecurringPeriod period, DateOnly asOf)
-    {
-        if (asOf <= startDate)
-        {
-            return 0;
-        }
-
-        var index = period switch
-        {
-            RecurringPeriod.Weekly => (asOf.DayNumber - startDate.DayNumber) / 7,
-            RecurringPeriod.Monthly => ((asOf.Year - startDate.Year) * 12) + (asOf.Month - startDate.Month),
-            RecurringPeriod.Yearly => asOf.Year - startDate.Year,
-            _ => 0
-        };
-
-        // Ay/yıl farkı üst sınırdır; kaydırılmış başlangıç henüz gelmediyse bir önceki dönemdeyiz.
-        while (index > 0 && Shift(startDate, period, index) > asOf)
-        {
-            index--;
-        }
-
-        return index;
-    }
-
-    private static DateOnly Shift(DateOnly startDate, RecurringPeriod period, int count) => period switch
-    {
-        RecurringPeriod.Weekly => startDate.AddDays(7 * count),
-        RecurringPeriod.Monthly => startDate.AddMonths(count),
-        RecurringPeriod.Yearly => startDate.AddYears(count),
-        _ => startDate.AddDays(7 * count)
-    };
+        new(entity.Id, entity.Name, entity.Amount, entity.Period, entity.IntervalCount, entity.StartDate, entity.IsActive, periodStart, periodEnd, isPaid);
 }

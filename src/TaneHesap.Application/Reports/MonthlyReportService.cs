@@ -28,6 +28,14 @@ public class MonthlyReportService : IMonthlyReportService
 
     public async Task<MonthlyReportDto> GetAsync(Guid businessId, int year, int month, CancellationToken ct = default)
     {
+        // Genel maliyet (tüm giderler ÷ tabak) ay içinde her gün değişir ve yanıltır; yalnızca biten ay için hesaplanır.
+        var monthEnd = new DateOnly(year, month, 1).AddMonths(1).AddDays(-1);
+        if (BusinessClock.Today <= monthEnd)
+        {
+            return new MonthlyReportDto(year, month, 0, 0, 0, 0, 0, 0, 0, 0,
+                new List<IngredientEfficiencyDto>(), new List<string>(), null, IsFinal: false);
+        }
+
         var current = await LoadMonthAsync(businessId, year, month, ct);
         var previousStart = new DateOnly(year, month, 1).AddMonths(-1);
         var previous = await LoadMonthAsync(businessId, previousStart.Year, previousStart.Month, ct);

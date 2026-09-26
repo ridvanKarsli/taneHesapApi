@@ -1,3 +1,4 @@
+using System.Globalization;
 using TaneHesap.Application.Common;
 using TaneHesap.Application.Common.Exceptions;
 using TaneHesap.Application.Common.Interfaces;
@@ -11,6 +12,7 @@ namespace TaneHesap.Application.Employees;
 public class EmployeeWalletService : IEmployeeWalletService
 {
     public const string PaymentExpenseTypeName = "Personel Ödemesi";
+    private static readonly CultureInfo Tr = CultureInfo.GetCultureInfo("tr-TR");
 
     private readonly IUnitOfWork _unitOfWork;
     private readonly IIdentityService _identityService;
@@ -95,13 +97,44 @@ public class EmployeeWalletService : IEmployeeWalletService
     public async Task<EmployeePaymentDto> PayAsync(Guid businessId, Guid employeeUserId, CreateEmployeePaymentRequest request, Guid userId, CancellationToken ct = default)
     {
         var employee = await GetEmployeeAsync(businessId, employeeUserId);
+        var (amount, hours, defaultNote) = await ResolvePaymentAmountAsync(businessId, employee, request, ct);
         var expenseType = await _typeCatalog.GetOrCreateAsync(businessId, PaymentExpenseTypeName, ExpenseCategory.Personnel, userId, ct);
 
         var expense = await _expenseService.CreateAsync(businessId, new CreateExpenseRequest(
-            expenseType.Id, request.Amount, null, request.Date, request.PaymentMethod, request.PaymentCardId, employeeUserId,
-            request.Note ?? $"{employee.FullName} — personel ödemesi"), userId, ct);
+            expenseType.Id, amount, hours, request.Date, request.PaymentMethod, request.PaymentCardId, employeeUserId,
+            string.IsNullOrWhiteSpace(request.Note) ? defaultNote : request.Note), userId, ct);
 
         return new EmployeePaymentDto(expense.Id, expense.ExpenseDate, expense.Amount, expense.PaymentMethod, expense.PaymentCardName, expense.Description);
+    }
+
+    /// <summary>Tutar ya da saat: saat verilirse tutar = saat × saatlik ücret (2 basamak); saat giderin miktar alanında saklanır.</summary>
+    private async Task<(decimal Amount, decimal? Hours, string DefaultNote)> ResolvePaymentAmountAsync(
+        Guid businessId, ApplicationUserInfo employee, CreateEmployeePaymentRequest request, CancellationToken ct)
+    {
+        if (request.Hours is { } hours)
+        {
+            if (hours <= 0)
+            {
+                throw new ValidationAppException("Saat 0'dan büyük olmalı.");
+            }
+
+            var wage = (await _unitOfWork.Repository<EmployeeProfile>().ListAsync(p => p.BusinessId == businessId && p.UserId == employee.UserId, ct))
+                .FirstOrDefault()?.HourlyWage ?? 0;
+            if (wage <= 0)
+            {
+                throw new ValidationAppException($"{employee.FullName} için saatlik ücret tanımlı değil; önce Çalışanlar'dan saatlik ücreti girin ya da tutar olarak ödeyin.");
+            }
+
+            return (MoneyMath.Round(hours * wage), hours,
+                $"{employee.FullName} — {hours.ToString("0.##", Tr)} saat × {wage.ToString("N2", Tr)} ₺");
+        }
+
+        if (request.Amount is not > 0)
+        {
+            throw new ValidationAppException("Ödeme tutarı veya saat girilmeli.");
+        }
+
+        return (request.Amount.Value, null, $"{employee.FullName} — personel ödemesi");
     }
 
     private async Task<ApplicationUserInfo> GetEmployeeAsync(Guid businessId, Guid employeeUserId)

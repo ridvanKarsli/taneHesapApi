@@ -23,4 +23,7 @@ public interface IRecurringExpenseService
 
     /// <summary>Güncel dönemi (bugün itibariyle) ödenmemiş VE dönem sonuna gelinmiş aktif giderleri döner — hatırlatma üretimi için.</summary>
     Task<List<RecurringExpenseDto>> GetDueForReminderAsync(Guid businessId, CancellationToken ct = default);
+
+    /// <summary>Ödenmemiş dönemler (gecikmiş önceki dönem + içinde bulunulan dönem); ödeme sayfasındaki "Ödenecekler" listesi.</summary>
+    Task<List<RecurringPayableDto>> GetPayablesAsync(Guid businessId, CancellationToken ct = default);
 }

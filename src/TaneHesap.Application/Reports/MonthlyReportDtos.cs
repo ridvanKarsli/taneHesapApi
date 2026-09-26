@@ -30,4 +30,6 @@ public record MonthlyReportDto(
     decimal PreviousCostPerPlate,
     List<IngredientEfficiencyDto> Ingredients,
     List<string> Warnings,
-    DateTime? ClosedAtUtc);
+    DateTime? ClosedAtUtc,
+    /// <summary>false: ay henüz bitmedi — tabak başı maliyet ve verimlilik ay sonunda hesaplanır, alanlar boş döner.</summary>
+    bool IsFinal = true);
