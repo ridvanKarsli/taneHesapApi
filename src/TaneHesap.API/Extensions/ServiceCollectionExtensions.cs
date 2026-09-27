@@ -8,6 +8,7 @@ using TaneHesap.Application.Dishes;
 using TaneHesap.Application.Employees;
 using TaneHesap.Application.ExpenseTypes;
 using TaneHesap.Application.Expenses;
+using TaneHesap.Application.IncomeVerification;
 using TaneHesap.Application.Ingredients;
 using TaneHesap.Application.Notifications;
 using TaneHesap.Application.Platforms;
@@ -46,6 +47,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<INotificationService, NotificationService>();
         services.AddScoped<IPlatformService, PlatformService>();
         services.AddScoped<ITreasuryService, TreasuryService>();
+        services.AddScoped<ITreasuryFundsGuard, TreasuryFundsGuard>();
         services.AddScoped<IExpenseTreasuryPoster, ExpenseTreasuryPoster>();
         services.AddScoped<IPaymentCardResolver, PaymentCardResolver>();
         services.AddScoped<IExpectedConsumptionCalculator, ExpectedConsumptionCalculator>();
@@ -57,7 +59,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IDailySalesService, DailySalesService>();
         services.AddScoped<IReportService, ReportService>();
         services.AddScoped<IMonthlyReportService, MonthlyReportService>();
-        services.AddScoped<IClosingVarianceTotals, ClosingVarianceTotals>();
+        services.AddScoped<IIncomeVerificationService, IncomeVerificationService>();
         services.AddScoped<IAuditLogService, AuditLogService>();
         services.AddScoped<IActivityService, ActivityService>();
 

@@ -1,6 +1,7 @@
 using System.Globalization;
 using TaneHesap.Application.Common;
 using TaneHesap.Application.Common.Interfaces;
+using TaneHesap.Application.IncomeVerification;
 using TaneHesap.Application.Notifications;
 using TaneHesap.Domain.Entities;
 using TaneHesap.Domain.Enums;
@@ -16,13 +17,11 @@ public class MonthlyReportService : IMonthlyReportService
 
     private readonly IUnitOfWork _unitOfWork;
     private readonly INotificationService _notificationService;
-    private readonly IClosingVarianceTotals _closingVariance;
 
-    public MonthlyReportService(IUnitOfWork unitOfWork, INotificationService notificationService, IClosingVarianceTotals closingVariance)
+    public MonthlyReportService(IUnitOfWork unitOfWork, INotificationService notificationService)
     {
         _unitOfWork = unitOfWork;
         _notificationService = notificationService;
-        _closingVariance = closingVariance;
     }
 
     public async Task<MonthlyReportDto> GetAsync(Guid businessId, int year, int month, CancellationToken ct = default)
@@ -31,7 +30,7 @@ public class MonthlyReportService : IMonthlyReportService
         var monthEnd = new DateOnly(year, month, 1).AddMonths(1).AddDays(-1);
         if (BusinessClock.Today <= monthEnd)
         {
-            return new MonthlyReportDto(year, month, 0, 0, 0, 0, 0, 0, 0, 0,
+            return new MonthlyReportDto(year, month, 0, 0, 0, 0, 0, 0, 0,
                 new List<IngredientEfficiencyDto>(), new List<string>(), null, IsFinal: false);
         }
 
@@ -52,11 +51,8 @@ public class MonthlyReportService : IMonthlyReportService
 
         var closed = (await _unitOfWork.Repository<MonthlyReport>().ListAsync(r => r.BusinessId == businessId && r.Year == year && r.Month == month, ct)).FirstOrDefault();
 
-        var monthStart = new DateOnly(year, month, 1);
-        var closingVariance = await _closingVariance.SumAsync(businessId, monthStart, monthStart.AddMonths(1).AddDays(-1), ct);
-
         return new MonthlyReportDto(
-            year, month, current.Revenue, current.Expense, closingVariance, current.Revenue + closingVariance - current.Expense, current.PlatesSold,
+            year, month, current.Revenue, current.Expense, current.Revenue - current.Expense, current.PlatesSold,
             current.CostPerPlate, current.PlatesSold == 0 ? 0 : MoneyMath.Round(current.Revenue / current.PlatesSold),
             previous.CostPerPlate, efficiency, warnings, closed?.GeneratedAtUtc);
     }
@@ -147,7 +143,9 @@ public class MonthlyReportService : IMonthlyReportService
         var purchases = await _unitOfWork.Repository<SupplierPurchase>()
             .ListAsync(p => p.BusinessId == businessId && p.PurchaseDate >= from && p.PurchaseDate <= to, ct);
 
-        var revenue = sales.Sum(s => s.TotalAmount);
+        // Doğrulanan günlerde gerçek dükkân içi gelir (dönem raporu ve kasa ile aynı kural).
+        var revenue = sales.Sum(s => s.TotalAmount)
+            + (await InStoreIncome.TotalDifferenceAsync(_unitOfWork, businessId, sales, from, to, ct)).Total;
         var expense = expenses.Sum(e => e.Amount);
         var plates = sales.Sum(s => s.Quantity);
         var used = purchases.GroupBy(p => p.IngredientId).ToDictionary(g => g.Key, g => g.Sum(p => p.Quantity));

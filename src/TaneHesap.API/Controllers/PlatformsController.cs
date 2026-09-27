@@ -1,3 +1,4 @@
+using TaneHesap.Application.Auth;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using TaneHesap.Application.Common.Interfaces;
@@ -6,8 +7,9 @@ using TaneHesap.Application.Platforms;
 namespace TaneHesap.API.Controllers;
 
 /// <summary>
-/// Paket servis platformları (Yemeksepeti, Getir vb.) ve komisyon yüzdeleri — ADMIN yönetir,
-/// EMPLOYEE görüntüler. bkz. Proje Raporu bölüm 3.4.
+/// Paket servis platformları (Yemeksepeti, Uber vb.) ve komisyon yüzdeleri. İşletme sahibi ve çalışan yalnızca
+/// görüntüler (satış Excel'i eşleştirmesi için); ekleme/düzenleme/silme işletmeye girmiş süper admindedir.
+/// bkz. Proje Raporu bölüm 3.4.
 /// </summary>
 [ApiController]
 [Route("api/platforms")]
@@ -35,7 +37,7 @@ public class PlatformsController : ControllerBase
         => Ok(await _platformService.GetByIdAsync(BusinessId, id, ct));
 
     [HttpPost]
-    [Authorize(Roles = "Admin")]
+    [Authorize(Policy = AuthPolicies.ActingSuperAdmin)]
     public async Task<ActionResult<PlatformDto>> Create([FromBody] CreatePlatformRequest request, CancellationToken ct)
     {
         var created = await _platformService.CreateAsync(BusinessId, request, UserId, ct);
@@ -43,12 +45,12 @@ public class PlatformsController : ControllerBase
     }
 
     [HttpPut("{id:guid}")]
-    [Authorize(Roles = "Admin")]
+    [Authorize(Policy = AuthPolicies.ActingSuperAdmin)]
     public async Task<ActionResult<PlatformDto>> Update(Guid id, [FromBody] UpdatePlatformRequest request, CancellationToken ct)
         => Ok(await _platformService.UpdateAsync(BusinessId, id, request, UserId, ct));
 
     [HttpDelete("{id:guid}")]
-    [Authorize(Roles = "Admin")]
+    [Authorize(Policy = AuthPolicies.ActingSuperAdmin)]
     public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
     {
         await _platformService.DeleteAsync(BusinessId, id, ct);

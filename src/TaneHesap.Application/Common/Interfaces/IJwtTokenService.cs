@@ -10,7 +10,8 @@ public record AccessTokenResult(string Token, DateTime ExpiresAtUtc);
 /// </summary>
 public interface IJwtTokenService
 {
-    AccessTokenResult GenerateAccessToken(Guid userId, string username, string fullName, UserRole role, Guid? businessId);
+    /// <param name="actingSuperAdmin">Süper admin bir işletmeye girmiş: <c>role</c> Admin'dir, token ayrıca bunu belirtir.</param>
+    AccessTokenResult GenerateAccessToken(Guid userId, string username, string fullName, UserRole role, Guid? businessId, bool actingSuperAdmin = false);
 
     /// <summary>Kriptografik olarak güvenli, rastgele bir refresh token değeri üretir (henüz hash'lenmemiş).</summary>
     string GenerateRefreshTokenValue();

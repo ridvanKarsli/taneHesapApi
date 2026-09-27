@@ -131,7 +131,8 @@ public class AuthService : IAuthService
         var businessName = actingBusiness?.Name
             ?? (user.BusinessId is null ? null : (await _unitOfWork.Repository<Business>().GetByIdAsync(user.BusinessId.Value, ct))?.Name);
 
-        var accessToken = _jwtTokenService.GenerateAccessToken(user.UserId, user.Username, user.FullName, role, businessId);
+        var accessToken = _jwtTokenService.GenerateAccessToken(user.UserId, user.Username, user.FullName, role, businessId,
+            actingSuperAdmin: actingBusiness is not null);
 
         var refreshTokenValue = _jwtTokenService.GenerateRefreshTokenValue();
         var refreshTokenHash = _jwtTokenService.HashRefreshToken(refreshTokenValue);

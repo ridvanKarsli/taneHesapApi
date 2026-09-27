@@ -1,3 +1,4 @@
+using TaneHesap.Application.Platforms;
 using TaneHesap.Application.Common.Interfaces;
 using TaneHesap.Domain.Entities;
 using TaneHesap.Domain.Enums;
@@ -8,16 +9,28 @@ public class ExpenseTreasuryPoster : IExpenseTreasuryPoster
 {
     public const string SourceReferenceType = nameof(Expense);
 
-    private readonly IUnitOfWork _unitOfWork;
+    /// <summary>
+    /// Satış gelirinden kesilen otomatik giderler (POS ve platform komisyonu): para zaten o gelirle hesaba girer,
+    /// bu yüzden bakiye kontrolüne takılmaz (aksi halde satış yüklemesinin sırasına göre yanlışlıkla reddedilirdi).
+    /// </summary>
+    private static readonly HashSet<string> SaleDeductionSources = new()
+    {
+        CardFeeExpensePoster.SourceType,
+        PlatformCommissionExpensePoster.SourceType
+    };
 
-    public ExpenseTreasuryPoster(IUnitOfWork unitOfWork)
+    private readonly IUnitOfWork _unitOfWork;
+    private readonly ITreasuryFundsGuard _fundsGuard;
+
+    public ExpenseTreasuryPoster(IUnitOfWork unitOfWork, ITreasuryFundsGuard fundsGuard)
     {
         _unitOfWork = unitOfWork;
+        _fundsGuard = fundsGuard;
     }
 
     public async Task SyncAsync(Expense expense, CancellationToken ct = default)
     {
-        await RemoveAsync(expense.Id, ct);
+        var stale = await RemoveRowsAsync(expense.Id, ct);
 
         var account = ToAccount(expense.PaymentMethod);
         if (account is null)
@@ -25,7 +38,7 @@ public class ExpenseTreasuryPoster : IExpenseTreasuryPoster
             return;
         }
 
-        await _unitOfWork.Repository<TreasuryTransaction>().AddAsync(new TreasuryTransaction
+        var row = new TreasuryTransaction
         {
             BusinessId = expense.BusinessId,
             Account = account.Value,
@@ -37,16 +50,28 @@ public class ExpenseTreasuryPoster : IExpenseTreasuryPoster
             SourceReferenceType = SourceReferenceType,
             SourceReferenceId = expense.Id,
             CreatedByUserId = expense.UpdatedByUserId ?? expense.CreatedByUserId
-        }, ct);
+        };
+
+        if (expense.SourceReferenceType is null || !SaleDeductionSources.Contains(expense.SourceReferenceType))
+        {
+            await _fundsGuard.EnsureAvailableAsync(expense.BusinessId, stale, new[] { row }, ct);
+        }
+
+        await _unitOfWork.Repository<TreasuryTransaction>().AddAsync(row, ct);
     }
 
-    public async Task RemoveAsync(Guid expenseId, CancellationToken ct = default)
+    public async Task RemoveAsync(Guid expenseId, CancellationToken ct = default) => await RemoveRowsAsync(expenseId, ct);
+
+    private async Task<List<TreasuryTransaction>> RemoveRowsAsync(Guid expenseId, CancellationToken ct)
     {
         var repo = _unitOfWork.Repository<TreasuryTransaction>();
-        foreach (var stale in await repo.ListAsync(t => t.SourceReferenceType == SourceReferenceType && t.SourceReferenceId == expenseId, ct))
+        var stale = await repo.ListAsync(t => t.SourceReferenceType == SourceReferenceType && t.SourceReferenceId == expenseId, ct);
+        foreach (var row in stale)
         {
-            repo.Remove(stale);
+            repo.Remove(row);
         }
+
+        return stale;
     }
 
     private static TreasuryAccount? ToAccount(PaymentMethod? method) => method switch

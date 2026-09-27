@@ -6,7 +6,8 @@ using TaneHesap.Application.ExpenseTypes;
 namespace TaneHesap.API.Controllers;
 
 /// <summary>
-/// Gider türü kataloğu — ADMIN oluşturur/günceller, EMPLOYEE sadece listeler.
+/// Gider türü kataloğu. Gider girerken listede olmayan tür "+ Yeni tür" ile anında eklenir (ADMIN ve EMPLOYEE);
+/// düzenleme/silme ADMIN'dedir.
 /// bkz. Proje Raporu bölüm 3.2.
 /// </summary>
 [ApiController]
@@ -34,7 +35,6 @@ public class ExpenseTypesController : ControllerBase
         => Ok(await _expenseTypeService.GetByIdAsync(BusinessId, id, ct));
 
     [HttpPost]
-    [Authorize(Roles = "Admin")]
     public async Task<ActionResult<ExpenseTypeDto>> Create([FromBody] CreateExpenseTypeRequest request, CancellationToken ct)
     {
         var userId = _currentUserService.UserId!.Value;

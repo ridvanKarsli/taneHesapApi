@@ -1,3 +1,4 @@
+using TaneHesap.Application.IncomeVerification;
 using TaneHesap.Application.Common;
 using TaneHesap.Application.Common.Interfaces;
 using TaneHesap.Application.DailySales;
@@ -8,11 +9,11 @@ using TaneHesap.Domain.Enums;
 namespace TaneHesap.Application.Treasury;
 
 /// <summary>
-/// Dükkan içi kart (POS) satışlarında bankanın kestiği komisyonu (Business.CardFeePercentage, varsayılan %3)
-/// gün başına otomatik bir gidere dönüştürür; ödeme şekli Bank olduğu için kart kasasından düşer ve raporlarda
+/// Dükkan içi kart (POS) gelirinde (doğrulanmışsa gerçek, değilse beklenen) bankanın kestiği komisyonu (Business.CardFeePercentage, varsayılan %3)
+/// gün başına otomatik bir gidere dönüştürür; ödeme şekli Bank olduğu için banka hesabından düşer ve raporlarda
 /// gider olarak görünür. Satış geliri brüt yazılır (SalesTreasuryPoster), kesinti bu giderle netleşir.
 /// </summary>
-public class CardFeeExpensePoster : IDailySalesSideEffect
+public class CardFeeExpensePoster : IIncomeDependentSideEffect
 {
     public const string SourceType = "CardFee";
     private const string ExpenseTypeName = "Kart Komisyonu";
@@ -36,13 +37,16 @@ public class CardFeeExpensePoster : IDailySalesSideEffect
 
         var business = await _unitOfWork.Repository<Business>().GetByIdAsync(businessId, ct);
         var feePercent = business?.CardFeePercentage ?? 0m;
-        var cardSales = await _unitOfWork.Repository<DailySalesEntry>()
-            .ListAsync(e => e.BusinessId == businessId && e.PaymentMethod == PaymentMethod.Card && e.Channel == SalesChannel.InStore && dates.Contains(e.SaleDate), ct);
+        var inStoreSales = await _unitOfWork.Repository<DailySalesEntry>()
+            .ListAsync(e => e.BusinessId == businessId && e.Channel == SalesChannel.InStore && dates.Contains(e.SaleDate), ct);
+        var verifications = await InStoreIncome.LoadAsync(_unitOfWork, businessId, dates.Min(), dates.Max(), ct);
 
         foreach (var date in dates)
         {
             var sourceId = DeterministicGuid.From(SourceType, businessId, date);
-            var fee = MoneyMath.Round(cardSales.Where(s => s.SaleDate == date).Sum(s => s.TotalAmount) * feePercent / 100m);
+            var daySales = inStoreSales.Where(s => s.SaleDate == date).ToList();
+            var cardIncome = InStoreIncome.Effective(daySales, verifications.GetValueOrDefault(date)).Card;
+            var fee = MoneyMath.Round(cardIncome * feePercent / 100m);
             if (fee <= 0)
             {
                 await _autoExpenses.RemoveAsync(businessId, SourceType, sourceId, ct);

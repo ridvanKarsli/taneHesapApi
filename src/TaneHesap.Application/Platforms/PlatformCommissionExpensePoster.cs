@@ -11,7 +11,7 @@ namespace TaneHesap.Application.Platforms;
 /// Paket servis platformu (Yemeksepeti, Getir vb.) satışlarının komisyonunu otomatik bir gidere dönüştürür
 /// (bkz. Proje Raporu bölüm 3.4). Gün sonu satışı değişince <see cref="IDailySalesSideEffect"/> olarak çağrılır;
 /// platform+gün başına tek gider (kaynak: "PlatformCommission" + deterministik Id) — satış kalmadıysa silinir.
-/// Komisyon platform hakedişinden kesildiği için ödeme şekli Bank'tır (kart kasasından düşer).
+/// Komisyon platform hakedişinden kesildiği için ödeme şekli Bank'tır (banka hesabından düşer).
 /// </summary>
 public class PlatformCommissionExpensePoster : IDailySalesSideEffect
 {

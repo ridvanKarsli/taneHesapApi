@@ -26,13 +26,41 @@ public class ExpenseTypeService : IExpenseTypeService
         return ToDto(entity);
     }
 
+    /// <summary>
+    /// Gider girerken "+ Yeni tür" ile de çağrılır: ad boş olamaz; aynı adda (büyük/küçük harf farkıyla) tür varsa
+    /// yenisi açılmaz, mevcut tür (pasifse yeniden aktif edilerek) döner. Birim boşsa "adet".
+    /// </summary>
     public async Task<ExpenseTypeDto> CreateAsync(Guid businessId, CreateExpenseTypeRequest request, Guid createdByUserId, CancellationToken ct = default)
     {
+        var name = request.Name?.Trim() ?? "";
+        if (name.Length == 0)
+        {
+            throw new ValidationAppException("Gider türü adı boş olamaz.");
+        }
+
+        var repo = _unitOfWork.Repository<ExpenseType>();
+        var tr = System.Globalization.CultureInfo.GetCultureInfo("tr-TR");
+        var existing = (await repo.ListAsync(e => e.BusinessId == businessId, ct))
+            .FirstOrDefault(e => StringComparer.Create(tr, ignoreCase: true).Equals(e.Name.Trim(), name));
+        if (existing is not null)
+        {
+            if (!existing.IsActive)
+            {
+                existing.IsActive = true;
+                existing.UpdatedByUserId = createdByUserId;
+                existing.UpdatedAtUtc = DateTime.UtcNow;
+                repo.Update(existing);
+                await _unitOfWork.SaveChangesAsync(ct);
+            }
+
+            return ToDto(existing);
+        }
+
         var entity = new ExpenseType
         {
             BusinessId = businessId,
-            Name = request.Name,
-            Unit = request.Unit,
+            Name = name,
+            Unit = string.IsNullOrWhiteSpace(request.Unit) ? "adet" : request.Unit.Trim(),
             Category = request.Category,
             IsActive = true,
             CreatedByUserId = createdByUserId

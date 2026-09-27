@@ -4,7 +4,7 @@ using TaneHesap.Domain.Enums;
 namespace TaneHesap.Domain.Entities;
 
 /// <summary>
-/// İşletme kasasının (nakit kasası, kart kasası/banka, kredi kartları) tek doğruluk kaynağı olan
+/// İşletme kasasının (nakit kasası, banka hesabı, kredi kartları) tek doğruluk kaynağı olan
 /// hareket defteri. Bakiyeler bu tablonun toplamından türetilir; hiçbir yerde ayrıca saklanmaz.
 /// Satış geliri, gider ödemesi, transfer, kart ödemesi ve manuel düzeltme hepsi buraya yazılır.
 /// bkz. Proje Raporu bölüm 3.15.

@@ -1,7 +1,7 @@
 namespace TaneHesap.Application.Treasury;
 
 /// <summary>
-/// İşletme kasası: nakit kasası, kart kasası (banka/POS hesabı) ve kredi kartları. Bakiyeler
+/// İşletme kasası: nakit kasası, banka hesabı (POS geliri buraya yatar) ve kredi kartları. Bakiyeler
 /// <see cref="Domain.Entities.TreasuryTransaction"/> defterinin toplamından türetilir. Satış geliri ve
 /// gider ödemeleri buraya ilgili poster'lar üzerinden otomatik yazılır; bu servis ADMIN'in elle yaptığı
 /// işlemleri (kart tanımı, transfer, kart ödemesi, düzeltme) ve raporlamayı üstlenir. bkz. Proje Raporu bölüm 3.15.
@@ -25,7 +25,11 @@ public interface ITreasuryService
 
     Task<List<TreasuryTransactionDto>> PayCardAsync(Guid businessId, CardPaymentRequest request, Guid userId, CancellationToken ct = default);
 
-    Task<TreasuryTransactionDto> AdjustAsync(Guid businessId, ManualAdjustmentRequest request, Guid userId, CancellationToken ct = default);
+    /// <summary>
+    /// Hesabın bakiyesini sayılan/gerçek tutara ayarlar (nakit kasası, banka hesabı) ya da kartın güncel borcunu girer;
+    /// fark bir düzeltme hareketi olarak yazılır. Sisteme başlarken açılış bakiyesi de budur.
+    /// </summary>
+    Task<TreasuryTransactionDto> SetBalanceAsync(Guid businessId, SetBalanceRequest request, Guid userId, CancellationToken ct = default);
 
     /// <summary>Yalnızca elle girilen hareketler (transfer, kart ödemesi, düzeltme) silinebilir; satış/gider kaynaklılar kendi modülünden yönetilir.</summary>
     Task DeleteTransactionAsync(Guid businessId, Guid transactionId, CancellationToken ct = default);

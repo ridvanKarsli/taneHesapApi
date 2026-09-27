@@ -174,7 +174,7 @@ public class ActivityService : IActivityService
     {
         PaymentMethod.Cash => "Nakit",
         PaymentMethod.Card => "Kredi kartı",
-        PaymentMethod.Bank => "Kart kasası",
+        PaymentMethod.Bank => "Banka hesabı",
         _ => "",
     };
 

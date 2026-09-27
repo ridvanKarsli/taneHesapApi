@@ -11,7 +11,7 @@ public enum UserRole
 /// <summary>
 /// Ödeme şekli. Satışta nakit/kart ayrımı raporlamada kullanılır; giderde paranın hangi kasadan
 /// çıktığını belirler: Cash = nakit kasası, Card = tanımlı bir kredi kartı (limitten düşer),
-/// Bank = kart kasası/banka hesabı (havale, platform komisyonu kesintisi vb.). bkz. Proje Raporu bölüm 3.15.
+/// Bank = banka hesabı (havale, platform komisyonu kesintisi vb.). bkz. Proje Raporu bölüm 3.15.
 /// </summary>
 public enum PaymentMethod
 {
@@ -65,7 +65,7 @@ public enum NotificationType
     MonthlyReport = 3
 }
 
-/// <summary>İşletme kasası hesabı: nakit kasası, kart kasası (banka/POS hesabı) veya bir kredi kartı. bkz. bölüm 3.15.</summary>
+/// <summary>İşletme kasası hesabı: nakit kasası, banka hesabı (POS geliri buraya yatar) veya bir kredi kartı. bkz. bölüm 3.15.</summary>
 public enum TreasuryAccount
 {
     Cash = 0,
@@ -76,13 +76,13 @@ public enum TreasuryAccount
 /// <summary>Kasa hareketinin kaynağı.</summary>
 public enum TreasuryTransactionKind
 {
-    /// <summary>Gün sonu satışlarından gelen gelir (nakit → nakit kasası, kart → kart kasası).</summary>
+    /// <summary>Gün sonu satışlarından gelen gelir (nakit → nakit kasası, kart → banka hesabı).</summary>
     SalesRevenue = 0,
     /// <summary>Bir gider kaydının ödemesi.</summary>
     Expense = 2,
-    /// <summary>Nakit ↔ kart kasası arası transfer.</summary>
+    /// <summary>Nakit ↔ banka hesabı arası transfer.</summary>
     Transfer = 3,
-    /// <summary>Kredi kartı borcunun kart kasasından ödenmesi (limit geri açılır).</summary>
+    /// <summary>Kredi kartı borcunun banka hesabından ödenmesi (limit geri açılır).</summary>
     CardPayment = 4,
     /// <summary>Açılış bakiyesi / sayım düzeltmesi.</summary>
     ManualAdjustment = 5

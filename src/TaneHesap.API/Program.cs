@@ -8,6 +8,7 @@ using TaneHesap.API.Filters;
 using TaneHesap.API.Hubs;
 using TaneHesap.API.Middleware;
 using TaneHesap.API.Services;
+using TaneHesap.Application.Auth;
 using TaneHesap.Application.Common.Interfaces;
 using TaneHesap.Infrastructure;
 using TaneHesap.Infrastructure.Persistence;
@@ -70,6 +71,12 @@ builder.Services.AddCors(options =>
               // her istek sunucuya iki kez gider (uzak sunucuda gecikme ikiye katlanır).
               .SetPreflightMaxAge(TimeSpan.FromHours(24)));
 });
+
+// İşletmeye girmiş süper admine özel işlemler (bkz. AuthPolicies).
+builder.Services.AddAuthorizationBuilder()
+    .AddPolicy(AuthPolicies.ActingSuperAdmin, policy => policy
+        .RequireRole(nameof(TaneHesap.Domain.Enums.UserRole.Admin))
+        .RequireClaim(AuthClaims.ActingSuperAdmin, "true"));
 
 // JSON yanıtları sıkıştırılır (listeler 5-10 kat küçülür; mobil bağlantıda fark belirgindir).
 builder.Services.AddResponseCompression(options => options.EnableForHttps = true);

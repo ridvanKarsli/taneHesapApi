@@ -3,7 +3,8 @@ namespace TaneHesap.Application.DailySales;
 /// <summary>
 /// Gün sonu kapanışı = günün Excel'lerini (Kasa, Yemeksepeti, Uber) yüklemek. Satış satırları kaydedilir;
 /// satılan ürünler reçeteye göre stoktan otomatik düşer, gelir kasaya yazılır, komisyonlar gider olur
-/// (IDailySalesSideEffect implementasyonları). Ayrıca sayım/gerçekleşen gelir girişi yoktur.
+/// (IDailySalesSideEffect implementasyonları). Dükkân içi gerçek nakit/kart geliri ayrıca Gelir Doğrulama ile girilir
+/// (bkz. IIncomeVerificationService).
 /// </summary>
 public interface IDailySalesService
 {

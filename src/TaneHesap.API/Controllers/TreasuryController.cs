@@ -7,7 +7,7 @@ using TaneHesap.Domain.Enums;
 namespace TaneHesap.API.Controllers;
 
 /// <summary>
-/// Kasa: nakit kasası, kart kasası (banka) ve kredi kartları — bakiye, transfer, kart ödemesi, düzeltme.
+/// Kasa: nakit kasası, banka hesabı ve kredi kartları — bakiye, transfer, kart ödemesi, düzeltme.
 /// Sınıf düzeyinde ADMIN+EMPLOYEE, çünkü ASP.NET Core birden fazla [Authorize] özniteliğini "hepsi geçmeli"
 /// diye birleştirir; yalnızca kart listesi (<see cref="GetCards"/>) çalışana açıktır, diğer her uç nokta
 /// eylem düzeyinde ADMIN'e kısıtlanır. bkz. Proje Raporu bölüm 3.15.
@@ -64,9 +64,9 @@ public class TreasuryController : ControllerBase
         => Ok(await _treasuryService.PayCardAsync(BusinessId, request, UserId, ct));
 
     [Authorize(Roles = "Admin")]
-    [HttpPost("adjustments")]
-    public async Task<ActionResult<TreasuryTransactionDto>> Adjust([FromBody] ManualAdjustmentRequest request, CancellationToken ct)
-        => Ok(await _treasuryService.AdjustAsync(BusinessId, request, UserId, ct));
+    [HttpPost("balance")]
+    public async Task<ActionResult<TreasuryTransactionDto>> SetBalance([FromBody] SetBalanceRequest request, CancellationToken ct)
+        => Ok(await _treasuryService.SetBalanceAsync(BusinessId, request, UserId, ct));
 
     /// <summary>EMPLOYEE de gider girerken "hangi kart" seçebilmek için kart listesini görür (bakiye/kasa değil).</summary>
     [HttpGet("cards")]

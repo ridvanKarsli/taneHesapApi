@@ -14,6 +14,6 @@ public class Business : BaseEntity
 
     public bool IsActive { get; set; } = true;
 
-    /// <summary>Kart (POS) satışlarında bankanın kestiği komisyon yüzdesi — kart kasasına net tutar yazılır. Varsayılan %3.</summary>
+    /// <summary>Kart (POS) satışlarında bankanın kestiği komisyon yüzdesi — banka hesabına net tutar yazılır. Varsayılan %3.</summary>
     public decimal CardFeePercentage { get; set; } = 3m;
 }

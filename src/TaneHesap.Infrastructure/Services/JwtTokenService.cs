@@ -4,6 +4,7 @@ using System.Security.Cryptography;
 using System.Text;
 using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.Tokens;
+using TaneHesap.Application.Auth;
 using TaneHesap.Application.Common.Interfaces;
 using TaneHesap.Domain.Enums;
 
@@ -22,7 +23,7 @@ public class JwtTokenService : IJwtTokenService
         _configuration = configuration;
     }
 
-    public AccessTokenResult GenerateAccessToken(Guid userId, string username, string fullName, UserRole role, Guid? businessId)
+    public AccessTokenResult GenerateAccessToken(Guid userId, string username, string fullName, UserRole role, Guid? businessId, bool actingSuperAdmin = false)
     {
         var jwtSection = _configuration.GetSection("Jwt");
         var secret = jwtSection["Secret"] ?? throw new InvalidOperationException("Jwt:Secret appsettings içinde tanımlı değil.");
@@ -45,6 +46,11 @@ public class JwtTokenService : IJwtTokenService
         if (businessId.HasValue)
         {
             claims.Add(new Claim("business_id", businessId.Value.ToString()));
+        }
+
+        if (actingSuperAdmin)
+        {
+            claims.Add(new Claim(AuthClaims.ActingSuperAdmin, "true"));
         }
 
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secret));

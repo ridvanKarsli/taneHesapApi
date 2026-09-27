@@ -54,6 +54,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, IdentityR
     public DbSet<EmployeeProfile> EmployeeProfiles => Set<EmployeeProfile>();
     public DbSet<EmployeeWorkLog> EmployeeWorkLogs => Set<EmployeeWorkLog>();
     public DbSet<MonthlyReport> MonthlyReports => Set<MonthlyReport>();
+    public DbSet<DailyIncomeVerification> DailyIncomeVerifications => Set<DailyIncomeVerification>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -125,6 +126,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, IdentityR
         builder.Entity<StockMovement>().HasIndex(x => new { x.BusinessId, x.SourceDate });
         builder.Entity<EmployeeProfile>().HasIndex(x => new { x.BusinessId, x.UserId }).IsUnique();
         builder.Entity<MonthlyReport>().HasIndex(x => new { x.BusinessId, x.Year, x.Month }).IsUnique();
+        builder.Entity<DailyIncomeVerification>().HasIndex(x => new { x.BusinessId, x.VerificationDate }).IsUnique();
 
         // Business ile ilişkili tüm entity'lerde varsayılan davranış Restrict (işletme yanlışlıkla
         // silinirse tüm veri de silinmesin diye) — her entity ayrı ayrı burada listelenmek yerine

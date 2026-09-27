@@ -20,7 +20,8 @@ public record DishSalesTotalDto(
 public record PlatformRevenueTotalDto(Guid PlatformId, string PlatformName, decimal GrossRevenue, decimal CommissionAmount, decimal NetRevenue);
 
 /// <summary>
-/// Günlük/haftalık/aylık gelir-gider raporu — nakit/kart ve kanal bazlı kırılım ile.
+/// Günlük/haftalık/aylık gelir-gider raporu. Gelir, doğrulanan günlerde gerçek nakit/kart tutarlarıdır
+/// (bkz. InStoreIncome) — kasaya yazılanla aynı.
 /// bkz. Proje Raporu bölüm 3.14.
 /// </summary>
 public record PeriodReportDto(
@@ -29,12 +30,9 @@ public record PeriodReportDto(
     decimal TotalRevenue,
     decimal CashRevenue,
     decimal CardRevenue,
-    decimal InStoreRevenue,
     decimal PlatformRevenue,
     decimal TotalExpense,
-    /// <summary>Gün sonu kasa farkı (fazla +, açık −) — kasaya yazıldığı için kâra da dahildir.</summary>
-    decimal ClosingVariance,
-    /// <summary>Gelir + kasa farkı − gider.</summary>
+    /// <summary>Gelir − gider.</summary>
     decimal NetProfit,
     List<ExpenseCategoryTotalDto> ExpenseByCategory,
     List<PlatformRevenueTotalDto> RevenueByPlatform,

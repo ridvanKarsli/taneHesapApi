@@ -17,10 +17,12 @@ public class TreasuryService : ITreasuryService
     };
 
     private readonly IUnitOfWork _unitOfWork;
+    private readonly ITreasuryFundsGuard _fundsGuard;
 
-    public TreasuryService(IUnitOfWork unitOfWork)
+    public TreasuryService(IUnitOfWork unitOfWork, ITreasuryFundsGuard fundsGuard)
     {
         _unitOfWork = unitOfWork;
+        _fundsGuard = fundsGuard;
     }
 
     public async Task<TreasurySummaryDto> GetSummaryAsync(Guid businessId, CancellationToken ct = default)
@@ -81,6 +83,13 @@ public class TreasuryService : ITreasuryService
     {
         EnsureNonNegative(request.Limit, "Kart limiti");
         var card = await GetCardAsync(businessId, cardId, ct);
+        var used = await UsedAmountAsync(card.Id, ct);
+        if (request.Limit < used)
+        {
+            throw new ValidationAppException(
+                $"Limit, kartın şu anki borcundan ({MoneyText.Format(used)}) düşük olamaz; kullanılabilir limit eksiye düşerdi. Önce kart borcunu ödeyin.");
+        }
+
         card.Name = request.Name.Trim();
         card.Limit = request.Limit;
         card.IsActive = request.IsActive;
@@ -109,7 +118,7 @@ public class TreasuryService : ITreasuryService
         EnsurePositive(request.Amount, "Transfer tutarı");
         if (request.From == request.To || !IsRegister(request.From) || !IsRegister(request.To))
         {
-            throw new ValidationAppException("Transfer yalnızca nakit kasası ile kart kasası arasında yapılabilir.");
+            throw new ValidationAppException("Transfer yalnızca nakit kasası ile banka hesabı arasında yapılabilir.");
         }
 
         var note = request.Note ?? $"{Label(request.From)} → {Label(request.To)} transferi";
@@ -128,10 +137,16 @@ public class TreasuryService : ITreasuryService
         EnsurePositive(request.Amount, "Kart ödemesi tutarı");
         if (!IsRegister(request.Source))
         {
-            throw new ValidationAppException("Kart ödemesi nakit kasasından veya kart kasasından yapılabilir.");
+            throw new ValidationAppException("Kart ödemesi nakit kasasından veya banka hesabından yapılabilir.");
         }
 
         var card = await GetCardAsync(businessId, request.PaymentCardId, ct);
+        var debt = await UsedAmountAsync(card.Id, ct);
+        if (request.Amount > debt)
+        {
+            throw new ValidationAppException($"“{card.Name}” kartının borcu {MoneyText.Format(debt)}; bundan fazla ödeme yapılamaz.");
+        }
+
         var note = request.Note ?? $"{card.Name} kart borcu ödemesi ({Label(request.Source)})";
         var groupId = Guid.NewGuid();
         var rows = new[]
@@ -143,22 +158,50 @@ public class TreasuryService : ITreasuryService
         return await PersistAsync(businessId, rows, ct);
     }
 
-    public async Task<TreasuryTransactionDto> AdjustAsync(Guid businessId, ManualAdjustmentRequest request, Guid userId, CancellationToken ct = default)
+    public async Task<TreasuryTransactionDto> SetBalanceAsync(Guid businessId, SetBalanceRequest request, Guid userId, CancellationToken ct = default)
     {
-        if (request.Amount == 0)
-        {
-            throw new ValidationAppException("Düzeltme tutarı 0 olamaz.");
-        }
+        EnsureNonNegative(request.Balance, request.Account == TreasuryAccount.CreditCard ? "Kart borcu" : "Bakiye");
+        var target = MoneyMath.Round(request.Balance);
+        var repo = _unitOfWork.Repository<TreasuryTransaction>();
 
-        Guid? cardId = null;
+        TreasuryTransaction row;
         if (request.Account == TreasuryAccount.CreditCard)
         {
-            cardId = (await GetCardAsync(businessId, request.PaymentCardId ?? Guid.Empty, ct)).Id;
+            // Kartta girilen değer güncel borçtur (kullanılan limit); limitten fazla olamaz.
+            var card = await GetCardAsync(businessId, request.PaymentCardId ?? Guid.Empty, ct);
+            if (target > card.Limit)
+            {
+                throw new ValidationAppException($"“{card.Name}” kartının borcu limitinden ({MoneyText.Format(card.Limit)}) fazla olamaz.");
+            }
+
+            var used = await UsedAmountAsync(card.Id, ct);
+            row = NewManual(businessId, TreasuryAccount.CreditCard, card.Id, EnsureChanged(used - target, used),
+                TreasuryTransactionKind.ManualAdjustment, request.Date,
+                request.Note ?? $"{card.Name} borcu {MoneyText.Format(used)} → {MoneyText.Format(target)} olarak ayarlandı", Guid.NewGuid(), userId);
+        }
+        else if (IsRegister(request.Account))
+        {
+            var current = await repo.SumAsync(t => t.BusinessId == businessId && t.Account == request.Account, t => t.Amount, ct);
+            row = NewManual(businessId, request.Account, null, EnsureChanged(target - current, current),
+                TreasuryTransactionKind.ManualAdjustment, request.Date,
+                request.Note ?? $"{Label(request.Account)} {MoneyText.Format(current)} → {MoneyText.Format(target)} olarak ayarlandı (sayım)", Guid.NewGuid(), userId);
+        }
+        else
+        {
+            throw new ValidationAppException("Geçersiz hesap.");
         }
 
-        var row = NewManual(businessId, request.Account, cardId, request.Amount, TreasuryTransactionKind.ManualAdjustment,
-            request.Date, request.Note ?? "Manuel düzeltme / açılış bakiyesi", Guid.NewGuid(), userId);
         return (await PersistAsync(businessId, new[] { row }, ct))[0];
+    }
+
+    private static decimal EnsureChanged(decimal difference, decimal current)
+    {
+        if (difference == 0)
+        {
+            throw new ValidationAppException($"Tutar zaten {MoneyText.Format(current)}; değişiklik yok.");
+        }
+
+        return difference;
     }
 
     public async Task DeleteTransactionAsync(Guid businessId, Guid transactionId, CancellationToken ct = default)
@@ -176,7 +219,10 @@ public class TreasuryService : ITreasuryService
         }
 
         // Transfer ve kart ödemesi çift kayıttır (çıkış + giriş); ikisi aynı SourceReferenceId ile bağlıdır ve birlikte silinir.
-        foreach (var row in await repo.ListAsync(t => t.SourceReferenceType == ManualSourceType && t.SourceReferenceId == transaction.SourceReferenceId, ct))
+        var rows = await repo.ListAsync(t => t.SourceReferenceType == ManualSourceType && t.SourceReferenceId == transaction.SourceReferenceId, ct);
+        // Bankaya giriş olan bir hareketi silmek bakiyeyi eksiye düşürmemeli.
+        await _fundsGuard.EnsureAvailableAsync(businessId, rows, Array.Empty<TreasuryTransaction>(), ct);
+        foreach (var row in rows)
         {
             repo.Remove(row);
         }
@@ -205,6 +251,7 @@ public class TreasuryService : ITreasuryService
     private async Task<List<TreasuryTransactionDto>> PersistAsync(Guid businessId, IEnumerable<TreasuryTransaction> rows, CancellationToken ct)
     {
         var list = rows.ToList();
+        await _fundsGuard.EnsureAvailableAsync(businessId, Array.Empty<TreasuryTransaction>(), list, ct);
         foreach (var row in list)
         {
             await _unitOfWork.Repository<TreasuryTransaction>().AddAsync(row, ct);
@@ -248,7 +295,7 @@ public class TreasuryService : ITreasuryService
     private static string Label(TreasuryAccount account) => account switch
     {
         TreasuryAccount.Cash => "Nakit kasası",
-        TreasuryAccount.Bank => "Kart kasası",
+        TreasuryAccount.Bank => "Banka hesabı",
         _ => "Kredi kartı"
     };
 
@@ -262,10 +309,13 @@ public class TreasuryService : ITreasuryService
         if (amount < 0) throw new ValidationAppException($"{subject} negatif olamaz.");
     }
 
+    /// <summary>Kartın güncel borcu (kullanılan limit). Kart hareketleri: gider negatif, ödeme pozitif → toplamın negatifi.</summary>
+    private async Task<decimal> UsedAmountAsync(Guid cardId, CancellationToken ct)
+        => -await _unitOfWork.Repository<TreasuryTransaction>().SumAsync(t => t.PaymentCardId == cardId, t => t.Amount, ct);
+
     private async Task<PaymentCardDto> ToDtoAsync(PaymentCard card, CancellationToken ct)
     {
-        // Kart hareketleri: gider negatif, ödeme pozitif → toplam, kullanılan limitin negatifi.
-        var used = -await _unitOfWork.Repository<TreasuryTransaction>().SumAsync(t => t.PaymentCardId == card.Id, t => t.Amount, ct);
+        var used = await UsedAmountAsync(card.Id, ct);
         return new PaymentCardDto(card.Id, card.Name, card.Limit, used, card.Limit - used, card.IsActive);
     }
 
