@@ -46,7 +46,7 @@ public class EmployeeWalletService : IEmployeeWalletService
             totalPaid,
             totalEarned - totalPaid,
             workLogs.OrderByDescending(w => w.WorkDate).ThenByDescending(w => w.CreatedAtUtc).Select(ToDto).ToList(),
-            payments.Select(p => new EmployeePaymentDto(p.Id, p.ExpenseDate, p.Amount, p.PaymentMethod, p.PaymentCardName, p.Description)).ToList());
+            payments.Select(p => new EmployeePaymentDto(p.Id, p.ExpenseDate, p.Amount, p.PaymentMethod, p.PaymentCardName, p.Description, p.CreatedAtUtc)).ToList());
     }
 
     public async Task<EmployeeWorkLogDto> AddWorkLogAsync(Guid businessId, Guid employeeUserId, CreateWorkLogRequest request, Guid userId, CancellationToken ct = default)
@@ -104,7 +104,7 @@ public class EmployeeWalletService : IEmployeeWalletService
             expenseType.Id, amount, hours, request.Date, request.PaymentMethod, request.PaymentCardId, employeeUserId,
             string.IsNullOrWhiteSpace(request.Note) ? defaultNote : request.Note), userId, ct);
 
-        return new EmployeePaymentDto(expense.Id, expense.ExpenseDate, expense.Amount, expense.PaymentMethod, expense.PaymentCardName, expense.Description);
+        return new EmployeePaymentDto(expense.Id, expense.ExpenseDate, expense.Amount, expense.PaymentMethod, expense.PaymentCardName, expense.Description, expense.CreatedAtUtc);
     }
 
     /// <summary>Tutar ya da saat: saat verilirse tutar = saat × saatlik ücret (2 basamak); saat giderin miktar alanında saklanır.</summary>
@@ -148,5 +148,5 @@ public class EmployeeWalletService : IEmployeeWalletService
         return user;
     }
 
-    private static EmployeeWorkLogDto ToDto(EmployeeWorkLog w) => new(w.Id, w.WorkDate, w.Hours, w.HourlyWage, w.Amount, w.Note);
+    private static EmployeeWorkLogDto ToDto(EmployeeWorkLog w) => new(w.Id, w.WorkDate, w.Hours, w.HourlyWage, w.Amount, w.Note, w.CreatedAtUtc);
 }

@@ -21,7 +21,8 @@ public class EmployeeService : IEmployeeService
         var employees = await _identityService.GetEmployeesByBusinessAsync(businessId);
         var wages = (await _unitOfWork.Repository<EmployeeProfile>().ListAsync(p => p.BusinessId == businessId, ct))
             .ToDictionary(p => p.UserId, p => p.HourlyWage);
-        return employees.Select(e => ToDto(e, wages.GetValueOrDefault(e.UserId))).ToList();
+        var balances = await BalancesAsync(businessId, null, ct);
+        return employees.Select(e => ToDto(e, wages.GetValueOrDefault(e.UserId), balances.GetValueOrDefault(e.UserId))).ToList();
     }
 
     public async Task<EmployeeDto> CreateAsync(Guid businessId, CreateEmployeeRequest request, CancellationToken ct = default)
@@ -34,7 +35,7 @@ public class EmployeeService : IEmployeeService
         }
 
         await UpsertWageAsync(businessId, result.UserId.Value, request.HourlyWage, ct);
-        return new EmployeeDto(result.UserId.Value, request.Username, request.FullName, true, request.HourlyWage);
+        return new EmployeeDto(result.UserId.Value, request.Username, request.FullName, true, request.HourlyWage, 0);
     }
 
     public async Task DeleteAsync(Guid businessId, Guid employeeId, CancellationToken ct = default)
@@ -62,7 +63,8 @@ public class EmployeeService : IEmployeeService
         var user = await _identityService.GetByIdAsync(employeeId)
             ?? throw new NotFoundException("Employee", employeeId);
 
-        return ToDto(user, request.HourlyWage);
+        var balances = await BalancesAsync(businessId, employeeId, ct);
+        return ToDto(user, request.HourlyWage, balances.GetValueOrDefault(employeeId));
     }
 
     private async Task UpsertWageAsync(Guid businessId, Guid userId, decimal hourlyWage, CancellationToken ct)
@@ -91,6 +93,23 @@ public class EmployeeService : IEmployeeService
         }
     }
 
-    private static EmployeeDto ToDto(ApplicationUserInfo user, decimal hourlyWage)
-        => new(user.UserId, user.Username, user.FullName, user.IsActive, hourlyWage);
+    /// <summary>
+    /// Çalışan başına cüzdan bakiyesi (hak ediş − ödeme), iki toplu sorguyla; <paramref name="employeeId"/> verilirse yalnız o çalışan.
+    /// Kural cüzdan sayfasıyla aynıdır (bkz. EmployeeWalletService.GetWalletAsync).
+    /// </summary>
+    private async Task<Dictionary<Guid, decimal>> BalancesAsync(Guid businessId, Guid? employeeId, CancellationToken ct)
+    {
+        var earned = (await _unitOfWork.Repository<EmployeeWorkLog>()
+                .ListAsync(w => w.BusinessId == businessId && (employeeId == null || w.UserId == employeeId), ct))
+            .GroupBy(w => w.UserId).ToDictionary(g => g.Key, g => g.Sum(w => w.Amount));
+        var paid = (await _unitOfWork.Repository<Expense>()
+                .ListAsync(e => e.BusinessId == businessId && e.EmployeeUserId != null && (employeeId == null || e.EmployeeUserId == employeeId), ct))
+            .GroupBy(e => e.EmployeeUserId!.Value).ToDictionary(g => g.Key, g => g.Sum(e => e.Amount));
+
+        return earned.Keys.Union(paid.Keys)
+            .ToDictionary(id => id, id => earned.GetValueOrDefault(id) - paid.GetValueOrDefault(id));
+    }
+
+    private static EmployeeDto ToDto(ApplicationUserInfo user, decimal hourlyWage, decimal balance)
+        => new(user.UserId, user.Username, user.FullName, user.IsActive, hourlyWage, balance);
 }

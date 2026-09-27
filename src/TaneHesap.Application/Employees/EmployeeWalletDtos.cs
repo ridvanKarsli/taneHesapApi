@@ -2,12 +2,13 @@ using TaneHesap.Domain.Enums;
 
 namespace TaneHesap.Application.Employees;
 
-public record EmployeeWorkLogDto(Guid Id, DateOnly WorkDate, decimal Hours, decimal HourlyWage, decimal Amount, string? Note);
+/// <param name="CreatedAtUtc">Kaydın girildiği an (listede saat olarak gösterilir).</param>
+public record EmployeeWorkLogDto(Guid Id, DateOnly WorkDate, decimal Hours, decimal HourlyWage, decimal Amount, string? Note, DateTime CreatedAtUtc);
 
 public record CreateWorkLogRequest(DateOnly WorkDate, decimal Hours, string? Note);
 
 /// <summary>Çalışana yapılan ödeme — aslında Personnel kategorisinde bir Expense kaydıdır (Giderler'den de görünür/silinir).</summary>
-public record EmployeePaymentDto(Guid ExpenseId, DateOnly Date, decimal Amount, PaymentMethod? PaymentMethod, string? PaymentCardName, string? Description);
+public record EmployeePaymentDto(Guid ExpenseId, DateOnly Date, decimal Amount, PaymentMethod? PaymentMethod, string? PaymentCardName, string? Description, DateTime CreatedAtUtc);
 
 /// <summary>
 /// Ödeme ya tutar (<paramref name="Amount"/>) ya da saat (<paramref name="Hours"/>) olarak girilir — ikisinden biri.

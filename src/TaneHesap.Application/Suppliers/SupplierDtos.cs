@@ -8,7 +8,7 @@ public record CreateSupplierRequest(string Name, string? ContactInfo);
 
 public record UpdateSupplierRequest(string Name, string? ContactInfo, bool IsActive);
 
-public record SupplierPaymentDto(Guid Id, decimal Amount, DateOnly PaymentDate, PaymentMethod? PaymentMethod);
+public record SupplierPaymentDto(Guid Id, decimal Amount, DateOnly PaymentDate, PaymentMethod? PaymentMethod, DateTime CreatedAtUtc);
 
 public record SupplierPurchaseDto(
     Guid Id,
@@ -22,7 +22,9 @@ public record SupplierPurchaseDto(
     bool IsFullyPaid,
     decimal PaidAmount,
     decimal RemainingAmount,
-    List<SupplierPaymentDto> Payments);
+    List<SupplierPaymentDto> Payments,
+    /// <summary>Kaydın girildiği an (listede saat olarak gösterilir).</summary>
+    DateTime CreatedAtUtc);
 
 /// <summary>
 /// Yeni tedarikçi alışı. Kaydedilince: (1) ilgili malzemenin stoğuna Quantity kadar Purchase

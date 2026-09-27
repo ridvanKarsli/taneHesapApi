@@ -76,7 +76,7 @@ public class SupplierService : ISupplierService
 
         var purchases = await _unitOfWork.Repository<SupplierPurchase>()
             .ListAsync(p => p.BusinessId == businessId && p.SupplierId == supplierId, ct);
-        return await BuildPurchaseDtosAsync(businessId, purchases.OrderByDescending(p => p.PurchaseDate).ToList(), ct);
+        return await BuildPurchaseDtosAsync(businessId, purchases.OrderByDescending(p => p.PurchaseDate).ThenByDescending(p => p.CreatedAtUtc).ToList(), ct);
     }
 
     public async Task<SupplierPurchaseDto> AddPurchaseAsync(Guid businessId, Guid supplierId, CreateSupplierPurchaseRequest request, Guid createdByUserId, CancellationToken ct = default)
@@ -364,7 +364,8 @@ public class SupplierService : ISupplierService
                 purchase.IsFullyPaid,
                 paidAmount,
                 purchase.TotalAmount - paidAmount,
-                payments.Select(p => new SupplierPaymentDto(p.Id, p.Amount, p.PaymentDate, p.PaymentMethod)).ToList());
+                payments.Select(p => new SupplierPaymentDto(p.Id, p.Amount, p.PaymentDate, p.PaymentMethod, p.CreatedAtUtc)).ToList(),
+                purchase.CreatedAtUtc);
         }).ToList();
     }
 }
