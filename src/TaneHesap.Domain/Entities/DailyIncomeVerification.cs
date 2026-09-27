@@ -18,7 +18,7 @@ public class DailyIncomeVerification : BaseEntity, ITenantEntity
     /// <summary>Kasadan sayılan gerçek nakit gelir.</summary>
     public decimal ActualCash { get; set; }
 
-    /// <summary>POS / banka dökümündeki gerçek kart geliri (brüt; banka komisyonu ayrıca gider olur).</summary>
+    /// <summary>POS / banka dökümündeki gerçek kart geliri (brüt; POS komisyonu ayrıca gider olur).</summary>
     public decimal ActualCard { get; set; }
 
     public string? Note { get; set; }

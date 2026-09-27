@@ -14,7 +14,7 @@ public class IncomeVerificationService : IIncomeVerificationService
     public IncomeVerificationService(IUnitOfWork unitOfWork, IEnumerable<IDailySalesSideEffect> sideEffects)
     {
         _unitOfWork = unitOfWork;
-        // Kayıt sırası korunur (önce kasaya gelir, sonra kart komisyonu).
+        // Kayıt sırası korunur (önce kasaya gelir, sonra POS komisyonu).
         _incomeSideEffects = sideEffects.OfType<IIncomeDependentSideEffect>().ToList();
     }
 
@@ -91,7 +91,7 @@ public class IncomeVerificationService : IIncomeVerificationService
         await RepostAsync(businessId, date, userId, ct);
     }
 
-    /// <summary>Kasadaki gelir ve kart komisyonu, o günün yeni etkin gelirine göre yeniden yazılır.</summary>
+    /// <summary>Kasadaki gelir ve POS komisyonu, o günün yeni etkin gelirine göre yeniden yazılır.</summary>
     private async Task RepostAsync(Guid businessId, DateOnly date, Guid userId, CancellationToken ct)
     {
         foreach (var sideEffect in _incomeSideEffects)

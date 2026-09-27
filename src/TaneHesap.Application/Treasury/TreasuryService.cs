@@ -234,7 +234,7 @@ public class TreasuryService : ITreasuryService
     {
         if (request.CardFeePercentage is < 0 or > 100)
         {
-            throw new ValidationAppException("Kart komisyon yüzdesi 0-100 arasında olmalı.");
+            throw new ValidationAppException("POS komisyon yüzdesi 0-100 arasında olmalı.");
         }
 
         var business = await _unitOfWork.Repository<Business>().GetByIdAsync(businessId, ct)

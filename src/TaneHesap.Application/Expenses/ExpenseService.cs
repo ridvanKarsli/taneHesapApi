@@ -40,7 +40,7 @@ public class ExpenseService : IExpenseService
         var lookups = await LoadLookupsAsync(businessId, ct);
 
         return query
-            .OrderByDescending(e => e.ExpenseDate)
+            .OrderByDescending(e => e.ExpenseDate).ThenByDescending(e => e.CreatedAtUtc) // aynı günde en son girilen üstte
             .Select(e => ToDto(e, lookups))
             .ToList();
     }

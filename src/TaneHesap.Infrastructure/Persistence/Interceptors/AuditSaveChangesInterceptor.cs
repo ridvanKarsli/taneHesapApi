@@ -71,6 +71,10 @@ public class AuditSaveChangesInterceptor : SaveChangesInterceptor
         foreach (var entry in entries)
         {
             var (oldValuesJson, newValuesJson) = CaptureValues(entry);
+            if (entry.State == EntityState.Modified && newValuesJson is null)
+            {
+                continue; // Update() çağrıldı ama hiçbir alan gerçekten değişmedi — kayda gerek yok.
+            }
 
             context.Set<AuditLog>().Add(new AuditLog
             {
@@ -94,16 +98,31 @@ public class AuditSaveChangesInterceptor : SaveChangesInterceptor
         _ => (null, null)
     };
 
-    /// <summary>Modified durumunda sadece GERÇEKTEN değişen alanları loglar — gereksiz büyüme olmaz.</summary>
+    /// <summary>"Kim, ne zaman güncelledi" alanları tek başına bir değişiklik sayılmaz.</summary>
+    private static readonly HashSet<string> BookkeepingProperties = new()
+    {
+        nameof(BaseEntity.UpdatedAtUtc),
+        nameof(BaseEntity.UpdatedByUserId)
+    };
+
+    /// <summary>
+    /// Modified durumunda sadece değeri GERÇEKTEN değişen alanları loglar (Repository.Update tüm alanları "değişti"
+    /// işaretler; eski = yeni olanlar atlanır). Anlamlı bir değişiklik yoksa (null, null) döner ve kayıt yazılmaz.
+    /// </summary>
     private static (string? OldValuesJson, string? NewValuesJson) CaptureModifiedValues(EntityEntry<BaseEntity> entry)
     {
         var oldValues = new Dictionary<string, object?>();
         var newValues = new Dictionary<string, object?>();
 
-        foreach (var property in entry.Properties.Where(p => p.IsModified))
+        foreach (var property in entry.Properties.Where(p => p.IsModified && !Equals(p.OriginalValue, p.CurrentValue)))
         {
             oldValues[property.Metadata.Name] = property.OriginalValue;
             newValues[property.Metadata.Name] = property.CurrentValue;
+        }
+
+        if (newValues.Keys.All(BookkeepingProperties.Contains))
+        {
+            return (null, null);
         }
 
         return (JsonSerializer.Serialize(oldValues), JsonSerializer.Serialize(newValues));

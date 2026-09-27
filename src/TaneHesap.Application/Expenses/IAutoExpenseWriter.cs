@@ -21,7 +21,7 @@ public record AutoExpenseSpec(
     Guid UserId);
 
 /// <summary>
-/// Paranın çıktığı her olay (platform komisyonu, kart komisyonu, düzenli gider ödemesi, tedarikçi ödemesi,
+/// Paranın çıktığı her olay (platform komisyonu, POS komisyonu, düzenli gider ödemesi, tedarikçi ödemesi,
 /// personel ödemesi) tek bir yerde <see cref="Expense"/>'e dönüşür: gider türü get-or-create, kaynak başına
 /// idempotent upsert, kasa hareketi (<c>IExpenseTreasuryPoster</c>). Böylece raporlar, tabak başı maliyet
 /// ve kasa her para çıkışını aynı kanaldan görür. SaveChanges çağırmaz; çağıran kaydeder.

@@ -17,7 +17,7 @@ public readonly record struct DayIncome(decimal Cash, decimal Card)
 /// <summary>
 /// Dükkân içi gelirin tek kuralı: beklenen = o günün Kasa Excel satışları (nakit/kart); gün doğrulanmışsa
 /// etkin gelir gerçek tutarlardır. Kasa Excel'i olmayan (ya da sonradan silinen) günde doğrulama yok sayılır —
-/// satışsız bir gün kasaya gelir yazdıramaz. Kasa, kart komisyonu ve raporlar bu sınıfı kullanır ki üçü hep tutarlı olsun.
+/// satışsız bir gün kasaya gelir yazdıramaz. Kasa, POS komisyonu ve raporlar bu sınıfı kullanır ki üçü hep tutarlı olsun.
 /// </summary>
 public static class InStoreIncome
 {

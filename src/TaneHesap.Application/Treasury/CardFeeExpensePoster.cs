@@ -16,7 +16,7 @@ namespace TaneHesap.Application.Treasury;
 public class CardFeeExpensePoster : IIncomeDependentSideEffect
 {
     public const string SourceType = "CardFee";
-    private const string ExpenseTypeName = "Kart Komisyonu";
+    private const string ExpenseTypeName = "POS Komisyonu";
 
     private readonly IUnitOfWork _unitOfWork;
     private readonly IAutoExpenseWriter _autoExpenses;
@@ -55,7 +55,7 @@ public class CardFeeExpensePoster : IIncomeDependentSideEffect
 
             await _autoExpenses.UpsertAsync(new AutoExpenseSpec(
                 businessId, SourceType, sourceId, ExpenseTypeName, ExpenseCategory.Other, fee, date, PaymentMethod.Bank, null,
-                $"Kart satışları banka komisyonu %{feePercent:0.##} (otomatik, {date:dd.MM.yyyy})", userId), ct);
+                $"POS komisyonu %{feePercent:0.##} (otomatik, {date:dd.MM.yyyy})", userId), ct);
         }
 
         await _unitOfWork.SaveChangesAsync(ct);

@@ -16,7 +16,7 @@ public record ExpenseDto(
     Guid? EmployeeUserId,
     string? EmployeeName,
     string? Description,
-    /// <summary>Doluysa gider sistem tarafından üretildi (platform/kart komisyonu, düzenli gider, tedarikçi ödemesi) ve kaynağından yönetilir.</summary>
+    /// <summary>Doluysa gider sistem tarafından üretildi (platform/POS komisyonu, düzenli gider, tedarikçi ödemesi) ve kaynağından yönetilir.</summary>
     string? SourceReferenceType,
     Guid? CreatedByUserId,
     DateTime CreatedAtUtc);
