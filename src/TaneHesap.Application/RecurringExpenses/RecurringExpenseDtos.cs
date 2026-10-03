@@ -34,6 +34,18 @@ public record RecurringPayableDto(
     bool IsOverdue);
 
 /// <summary>
+/// Yaklaşan bir dönem: başlangıcı bugünden sonra olan (henüz ödenmesi gerekmeyen) dönem. Sayfanın altında ay ay listelenir.
+/// </summary>
+public record RecurringUpcomingDto(
+    Guid RecurringExpenseId,
+    string Name,
+    decimal Amount,
+    RecurringPeriod Period,
+    int IntervalCount,
+    DateOnly PeriodStartDate,
+    DateOnly PeriodEndDate);
+
+/// <summary>
 /// Bir dönemi (ör. bu ayı) ödendi olarak işaretler. Ödeme, ödeme şekline göre kasadan/karttan düşen otomatik
 /// bir gider olarak da kaydedilir (raporlar ve tabak başı maliyet bunu görür) — bkz. bölüm 3.8, 3.15.
 /// </summary>

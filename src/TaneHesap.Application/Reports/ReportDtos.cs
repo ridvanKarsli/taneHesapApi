@@ -17,6 +17,9 @@ public record DishSalesTotalDto(
     decimal EstimatedCost,
     decimal EstimatedProfit);
 
+/// <summary>Gider türüne göre toplam ("Kira", "Pirinç", "POS Komisyonu"…), büyükten küçüğe.</summary>
+public record ExpenseTypeTotalDto(Guid ExpenseTypeId, string ExpenseTypeName, ExpenseCategory Category, decimal Amount);
+
 public record PlatformRevenueTotalDto(Guid PlatformId, string PlatformName, decimal GrossRevenue, decimal CommissionAmount, decimal NetRevenue);
 
 /// <summary>
@@ -35,5 +38,6 @@ public record PeriodReportDto(
     /// <summary>Gelir − gider.</summary>
     decimal NetProfit,
     List<ExpenseCategoryTotalDto> ExpenseByCategory,
+    List<ExpenseTypeTotalDto> ExpenseByType,
     List<PlatformRevenueTotalDto> RevenueByPlatform,
     List<DishSalesTotalDto> SalesByDish);

@@ -39,6 +39,11 @@ public class DailySalesController : ControllerBase
     public async Task<ActionResult<List<DailySalesEntryDto>>> GetByDate([FromQuery] DateOnly date, CancellationToken ct)
         => Ok(await _dailySalesService.GetByDateAsync(BusinessId, date, ct));
 
+    /// <summary>Geçmiş yüklemeler: aralıktaki her gün ve kaynak için yüklenmiş satış özeti.</summary>
+    [HttpGet("uploads")]
+    public async Task<ActionResult<List<DailySalesUploadDto>>> GetUploads([FromQuery] DateOnly fromDate, [FromQuery] DateOnly toDate, CancellationToken ct)
+        => Ok(await _dailySalesService.GetUploadsAsync(BusinessId, fromDate, toDate, ct));
+
     [HttpGet("expected-summary")]
     public async Task<ActionResult<ExpectedDaySummaryDto>> GetExpectedSummary([FromQuery] DateOnly date, CancellationToken ct)
         => Ok(await _dailySalesService.GetExpectedSummaryAsync(BusinessId, date, ct));

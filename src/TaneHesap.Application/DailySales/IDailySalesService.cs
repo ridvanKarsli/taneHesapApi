@@ -27,4 +27,7 @@ public interface IDailySalesService
 
     /// <summary>O gün için sistemin (reçete × satış adedi) hesapladığı beklenen gelir ve malzeme tüketimi.</summary>
     Task<ExpectedDaySummaryDto> GetExpectedSummaryAsync(Guid businessId, DateOnly date, CancellationToken ct = default);
+
+    /// <summary>Aralıktaki her gün ve kaynak (kanal + platform) için yüklenmiş satış özeti; yüklenmemiş gün-kaynaklar listede yoktur.</summary>
+    Task<List<DailySalesUploadDto>> GetUploadsAsync(Guid businessId, DateOnly fromDate, DateOnly toDate, CancellationToken ct = default);
 }

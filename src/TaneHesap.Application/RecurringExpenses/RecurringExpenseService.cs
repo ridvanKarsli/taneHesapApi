@@ -10,7 +10,6 @@ namespace TaneHesap.Application.RecurringExpenses;
 public class RecurringExpenseService : IRecurringExpenseService
 {
     public const string PaymentSourceType = "RecurringExpensePayment";
-    private const string PaymentExpenseTypeName = "Düzenli Gider";
 
     private readonly IUnitOfWork _unitOfWork;
     private readonly IAutoExpenseWriter _autoExpenses;
@@ -119,8 +118,9 @@ public class RecurringExpenseService : IRecurringExpenseService
         }
 
         // Ödeme, kasadan/karttan düşen ve raporlara giren otomatik bir gider olarak da kaydedilir (dönem başına tek kayıt).
+        // Gider türü, düzenli giderin kendi adıdır ("Kira", "Elektrik") — giderler ve raporlar ne ödendiğini gösterir.
         var expense = await _autoExpenses.UpsertAsync(new AutoExpenseSpec(
-            businessId, PaymentSourceType, payment.Id, PaymentExpenseTypeName, ExpenseCategory.Other,
+            businessId, PaymentSourceType, payment.Id, entity.Name.Trim(), ExpenseCategory.Other,
             request.PaidAmount, request.PaidDate, request.PaymentMethod, request.PaymentCardId,
             $"{entity.Name} — {request.PeriodStartDate:dd.MM.yyyy}–{request.PeriodEndDate:dd.MM.yyyy} dönemi (otomatik)",
             updatedByUserId), ct);
@@ -177,6 +177,35 @@ public class RecurringExpenseService : IRecurringExpenseService
         }
 
         return result.OrderByDescending(p => p.IsOverdue).ThenBy(p => p.PeriodEndDate).ThenBy(p => p.Name).ToList();
+    }
+
+    public async Task<List<RecurringUpcomingDto>> GetUpcomingAsync(Guid businessId, DateOnly untilDate, CancellationToken ct = default)
+    {
+        var today = BusinessClock.Today;
+        if (untilDate <= today)
+        {
+            return new List<RecurringUpcomingDto>();
+        }
+
+        var items = await _unitOfWork.Repository<RecurringExpense>().ListAsync(r => r.BusinessId == businessId && r.IsActive, ct);
+        var result = new List<RecurringUpcomingDto>();
+        foreach (var item in items)
+        {
+            var schedule = ScheduleOf(item);
+            // İçinde bulunulan (ya da başlangıç ileri tarihliyse ilk) dönemden sonrası; ilk dönem bugünden sonra başlıyorsa o da yaklaşandır.
+            var index = schedule.IndexAt(today);
+            if (schedule.PeriodAt(index).Start <= today)
+            {
+                index++;
+            }
+
+            for (var (start, end) = schedule.PeriodAt(index); start <= untilDate; (start, end) = schedule.PeriodAt(++index))
+            {
+                result.Add(new RecurringUpcomingDto(item.Id, item.Name, item.Amount, item.Period, item.IntervalCount, start, end));
+            }
+        }
+
+        return result.OrderBy(u => u.PeriodStartDate).ThenBy(u => u.Name).ToList();
     }
 
     /// <summary>Ödenmemiş dönemler: bir önceki dönem (gecikmiş) ve içinde bulunulan dönem. Başlangıçtan önce dönem yoktur.</summary>

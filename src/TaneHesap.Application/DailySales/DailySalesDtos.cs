@@ -55,6 +55,9 @@ public record ImportDailySalesRequest(string FileName, List<ImportRowRequest> Ro
 
 public record ImportDailySalesResult(Guid ImportLogId, int RowCount, int SuccessCount, int ErrorCount, List<string> Errors);
 
+/// <summary>Bir günün bir kaynaktan (kanal + platform) yüklenmiş satışlarının özeti — "Geçmiş yüklemeler" listesi için.</summary>
+public record DailySalesUploadDto(DateOnly Date, SalesChannel Channel, Guid? PlatformId, int RowCount, decimal TotalAmount, DateTime LastUploadedAtUtc);
+
 public record ExpectedIngredientConsumptionDto(Guid IngredientId, string IngredientName, string Unit, decimal ExpectedQuantity);
 
 /// <summary>Bir gün için, Excel'den yüklenen siparişlere göre sistemin hesapladığı beklenen değerler.</summary>

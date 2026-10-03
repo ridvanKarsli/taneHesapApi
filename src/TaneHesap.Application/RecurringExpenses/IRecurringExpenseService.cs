@@ -26,4 +26,7 @@ public interface IRecurringExpenseService
 
     /// <summary>Ödenmemiş dönemler (gecikmiş önceki dönem + içinde bulunulan dönem); ödeme sayfasındaki "Ödenecekler" listesi.</summary>
     Task<List<RecurringPayableDto>> GetPayablesAsync(Guid businessId, CancellationToken ct = default);
+
+    /// <summary>Yaklaşan dönemler: bugünden sonra başlayıp <paramref name="untilDate"/>'e kadar olanlar, tarih sırasıyla (en yakın önce).</summary>
+    Task<List<RecurringUpcomingDto>> GetUpcomingAsync(Guid businessId, DateOnly untilDate, CancellationToken ct = default);
 }

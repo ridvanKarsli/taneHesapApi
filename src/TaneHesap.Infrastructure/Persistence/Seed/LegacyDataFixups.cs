@@ -8,6 +8,7 @@ namespace TaneHesap.Infrastructure.Persistence.Seed;
 /// idempotenttir (etkilenen satır yoksa hiçbir şey yapmaz).
 /// - "Sabit gider" kategorisi (eski enum değeri 1) kaldırıldı — mevcut gider türleri "Diğer"e taşınır (bölüm 3.2).
 /// - "Kart Komisyonu" adı "POS Komisyonu" oldu — mevcut otomatik gider türü ve açıklamalar yeniden adlandırılır.
+/// - Düzenli gider ödemeleri "Düzenli Gider" türü yerine düzenli giderin adını taşır; eski ödemeler taşınır.
 /// </summary>
 public static class LegacyDataFixups
 {
@@ -37,6 +38,31 @@ public static class LegacyDataFixups
             """
             UPDATE "TreasuryTransactions" SET "Description" = REPLACE("Description", 'Kart satışları banka komisyonu', 'POS komisyonu')
             WHERE "Description" LIKE 'Kart satışları banka komisyonu%'
+            """, ct);
+
+        // Düzenli gider ödemeleri eskiden tek bir "Düzenli Gider" türüne yazılıyordu; artık tür = düzenli giderin adı ("Kira").
+        // Eski ödemeler için ad başına tür açılır (yoksa) ve gider o türe taşınır.
+        await db.ExecuteSqlRawAsync(
+            """
+            INSERT INTO "ExpenseTypes" ("Id", "BusinessId", "Name", "Unit", "Category", "IsActive", "CreatedAtUtc")
+            SELECT gen_random_uuid(), r."BusinessId", TRIM(r."Name"), 'adet', 2, TRUE, NOW()
+            FROM "RecurringExpenses" AS r
+            WHERE EXISTS (
+                    SELECT 1 FROM "Expenses" AS e
+                    JOIN "RecurringExpensePayments" AS p ON p."Id" = e."SourceReferenceId"
+                    JOIN "ExpenseTypes" AS old ON old."Id" = e."ExpenseTypeId"
+                    WHERE e."SourceReferenceType" = 'RecurringExpensePayment' AND p."RecurringExpenseId" = r."Id" AND old."Name" = 'Düzenli Gider')
+              AND NOT EXISTS (SELECT 1 FROM "ExpenseTypes" AS t WHERE t."BusinessId" = r."BusinessId" AND t."Name" = TRIM(r."Name"))
+            """, ct);
+
+        await db.ExecuteSqlRawAsync(
+            """
+            UPDATE "Expenses" AS e SET "ExpenseTypeId" = t."Id"
+            FROM "RecurringExpensePayments" AS p
+            JOIN "RecurringExpenses" AS r ON r."Id" = p."RecurringExpenseId"
+            JOIN "ExpenseTypes" AS t ON t."BusinessId" = r."BusinessId" AND t."Name" = TRIM(r."Name")
+            JOIN "ExpenseTypes" AS old ON old."Name" = 'Düzenli Gider'
+            WHERE e."SourceReferenceType" = 'RecurringExpensePayment' AND e."SourceReferenceId" = p."Id" AND e."ExpenseTypeId" = old."Id"
             """, ct);
     }
 }

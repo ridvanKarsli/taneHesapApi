@@ -219,6 +219,18 @@ public class DailySalesService : IDailySalesService
             .ToList();
     }
 
+    public async Task<List<DailySalesUploadDto>> GetUploadsAsync(Guid businessId, DateOnly fromDate, DateOnly toDate, CancellationToken ct = default)
+    {
+        var entries = await _unitOfWork.Repository<DailySalesEntry>()
+            .ListAsync(e => e.BusinessId == businessId && e.SaleDate >= fromDate && e.SaleDate <= toDate, ct);
+
+        return entries
+            .GroupBy(e => (e.SaleDate, e.Channel, e.PlatformId))
+            .Select(g => new DailySalesUploadDto(g.Key.SaleDate, g.Key.Channel, g.Key.PlatformId, g.Count(), g.Sum(e => e.TotalAmount), g.Max(e => e.CreatedAtUtc)))
+            .OrderByDescending(u => u.Date)
+            .ToList();
+    }
+
     public async Task<ExpectedDaySummaryDto> GetExpectedSummaryAsync(Guid businessId, DateOnly date, CancellationToken ct = default)
     {
         var entries = await _unitOfWork.Repository<DailySalesEntry>()

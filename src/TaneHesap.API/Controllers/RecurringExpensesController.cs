@@ -38,6 +38,11 @@ public class RecurringExpensesController : ControllerBase
     public async Task<ActionResult<List<RecurringPayableDto>>> GetPayables(CancellationToken ct)
         => Ok(await _recurringExpenseService.GetPayablesAsync(BusinessId, ct));
 
+    /// <summary>Yaklaşan dönemler (bugünden sonra başlayanlar), verilen tarihe kadar; en yakın önce.</summary>
+    [HttpGet("upcoming")]
+    public async Task<ActionResult<List<RecurringUpcomingDto>>> GetUpcoming([FromQuery] DateOnly untilDate, CancellationToken ct)
+        => Ok(await _recurringExpenseService.GetUpcomingAsync(BusinessId, untilDate, ct));
+
     [HttpGet("{id:guid}")]
     public async Task<ActionResult<RecurringExpenseDto>> GetById(Guid id, CancellationToken ct)
         => Ok(await _recurringExpenseService.GetByIdAsync(BusinessId, id, ct));

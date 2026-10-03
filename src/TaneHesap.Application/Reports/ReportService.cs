@@ -43,6 +43,16 @@ public class ReportService : IReportService
             .OrderBy(d => d.Category)
             .ToList();
 
+        var expenseByType = expenses
+            .GroupBy(e => e.ExpenseTypeId)
+            .Select(g =>
+            {
+                var type = expenseTypesById.GetValueOrDefault(g.Key);
+                return new ExpenseTypeTotalDto(g.Key, type?.Name ?? "-", type?.Category ?? ExpenseCategory.Other, g.Sum(e => e.Amount));
+            })
+            .OrderByDescending(d => d.Amount).ThenBy(d => d.ExpenseTypeName)
+            .ToList();
+
         var revenueByPlatform = salesEntries
             .Where(e => e.Channel == SalesChannel.Platform && e.PlatformId.HasValue)
             .GroupBy(e => e.PlatformId!.Value)
@@ -62,7 +72,7 @@ public class ReportService : IReportService
 
         return new PeriodReportDto(
             fromDate, toDate, totalRevenue, cashRevenue, cardRevenue, platformRevenue,
-            totalExpense, netProfit, expenseByCategory, revenueByPlatform, salesByDish);
+            totalExpense, netProfit, expenseByCategory, expenseByType, revenueByPlatform, salesByDish);
     }
 
     /// <summary>Satışları tabak boyuna göre toplar; en çok satandan aza sıralı döner.</summary>
