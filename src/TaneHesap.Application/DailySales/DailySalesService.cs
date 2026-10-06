@@ -34,9 +34,15 @@ public class DailySalesService : IDailySalesService
             var row = request.Rows[i];
             var rowNo = i + 1;
 
-            if (!dishSizesById.ContainsKey(row.DishSizeId))
+            if (row.DishSizeId is Guid sizeId && !dishSizesById.ContainsKey(sizeId))
             {
-                errors.Add($"Satır {rowNo}: tabak boyu bulunamadı ({row.DishSizeId}).");
+                errors.Add($"Satır {rowNo}: tabak boyu bulunamadı ({sizeId}).");
+                continue;
+            }
+
+            if (row.DishSizeId is null && string.IsNullOrWhiteSpace(row.ProductName))
+            {
+                errors.Add($"Satır {rowNo}: ürün seçilmemiş ve ürün adı boş.");
                 continue;
             }
 
@@ -67,6 +73,8 @@ public class DailySalesService : IDailySalesService
                 SaleDate = row.SaleDate,
                 SaleTime = row.SaleTime,
                 DishSizeId = row.DishSizeId,
+                ProductName = string.IsNullOrWhiteSpace(row.ProductName) ? null : row.ProductName.Trim(),
+                ExternalOrderNumber = string.IsNullOrWhiteSpace(row.ExternalOrderNumber) ? null : row.ExternalOrderNumber.Trim(),
                 Quantity = row.Quantity,
                 TotalAmount = row.TotalAmount,
                 PaymentMethod = row.PaymentMethod,
@@ -208,13 +216,15 @@ public class DailySalesService : IDailySalesService
             .OrderBy(e => e.SaleTime)
             .Select(e =>
             {
-                dishSizesById.TryGetValue(e.DishSizeId, out var size);
-                var dishName = size is not null && dishesById.TryGetValue(size.DishId, out var dish) ? dish.Name : "-";
+                DishSize? size = null;
+                if (e.DishSizeId is Guid sizeId) dishSizesById.TryGetValue(sizeId, out size);
+                // Eşleşmeyen platform ürünü: dosyadaki adıyla, boy "—" (stoktan düşüm yok).
+                var dishName = size is not null && dishesById.TryGetValue(size.DishId, out var dish) ? dish.Name : (e.ProductName ?? "-");
                 string? platformName = e.PlatformId.HasValue && platformsById.TryGetValue(e.PlatformId.Value, out var platform) ? platform.Name : null;
 
                 return new DailySalesEntryDto(
-                    e.Id, e.SaleDate, e.SaleTime, e.DishSizeId, dishName, size?.Name ?? "-",
-                    e.Quantity, e.TotalAmount, e.PaymentMethod, e.Channel, e.PlatformId, platformName, e.DiscountAmount);
+                    e.Id, e.SaleDate, e.SaleTime, e.DishSizeId, dishName, size?.Name ?? "—",
+                    e.Quantity, e.TotalAmount, e.PaymentMethod, e.Channel, e.PlatformId, platformName, e.DiscountAmount, e.ExternalOrderNumber);
             })
             .ToList();
     }

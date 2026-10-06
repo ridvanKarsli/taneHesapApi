@@ -2,11 +2,12 @@ using TaneHesap.Domain.Enums;
 
 namespace TaneHesap.Application.DailySales;
 
+/// <param name="DishSizeId">Sistemde eşleşen ürün boyu; eşleşmeyen platform ürünü için null (stoktan düşüm yok).</param>
 public record DailySalesEntryDto(
     Guid Id,
     DateOnly SaleDate,
     TimeOnly? SaleTime,
-    Guid DishSizeId,
+    Guid? DishSizeId,
     string DishName,
     string SizeName,
     int Quantity,
@@ -15,7 +16,8 @@ public record DailySalesEntryDto(
     SalesChannel Channel,
     Guid? PlatformId,
     string? PlatformName,
-    decimal? DiscountAmount);
+    decimal? DiscountAmount,
+    string? ExternalOrderNumber);
 
 /// <summary>
 /// Excel'den (veya ilerideki bir dosya yükleme uç noktasından) ayrıştırılmış tek bir satır.
@@ -29,16 +31,19 @@ public record DailySalesEntryDto(
 /// bilgi amaçlıdır — gelir, kasa ve komisyon hesapları TotalAmount üzerinden yapılır. Arayüz, fiyat × adet − indirim'i
 /// otomatik önerir. bkz. Proje Raporu bölüm 3.5.
 /// </remarks>
+/// <param name="DishSizeId">Eşleşen ürün boyu; eşleşmediyse null ve <paramref name="ProductName"/> zorunlu.</param>
 public record ImportRowRequest(
     DateOnly SaleDate,
     TimeOnly? SaleTime,
-    Guid DishSizeId,
+    Guid? DishSizeId,
     int Quantity,
     decimal TotalAmount,
     PaymentMethod PaymentMethod,
     SalesChannel Channel,
     Guid? PlatformId,
-    decimal? DiscountAmount);
+    decimal? DiscountAmount,
+    string? ProductName = null,
+    string? ExternalOrderNumber = null);
 
 /// <summary>Aynı güne ikinci kez satış gelirse ne yapılacağı.</summary>
 public enum DailySalesImportMode

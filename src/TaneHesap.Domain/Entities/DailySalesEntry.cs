@@ -15,8 +15,18 @@ public class DailySalesEntry : BaseEntity, ITenantEntity
     public DateOnly SaleDate { get; set; }
     public TimeOnly? SaleTime { get; set; }
 
-    public Guid DishSizeId { get; set; }
+    /// <summary>
+    /// Sistemdeki ürün boyu. Platform dosyasındaki ürün sistemde eşleşmediyse null'dır: satır gelir olarak sayılır,
+    /// ama reçete olmadığı için stoktan düşüm olmaz; adı <see cref="ProductName"/>'de tutulur.
+    /// </summary>
+    public Guid? DishSizeId { get; set; }
     public DishSize? DishSize { get; set; }
+
+    /// <summary>Dosyadaki ürün adı (eşleşmeyen satırlar için; eşleşenlerde de bilgi amaçlı saklanır).</summary>
+    public string? ProductName { get; set; }
+
+    /// <summary>Platformun sipariş numarası (Trendyol Go / Yemeksepeti) — bir siparişin satırlarını bağlar.</summary>
+    public string? ExternalOrderNumber { get; set; }
 
     public int Quantity { get; set; }
 

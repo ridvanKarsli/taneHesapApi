@@ -158,7 +158,7 @@ public class DishService : IDishService
         var sizeIds = sizes.Select(s => s.Id).ToList();
 
         DeletionGuard.EnsureNotUsed(
-            await _unitOfWork.Repository<DailySalesEntry>().AnyAsync(e => sizeIds.Contains(e.DishSizeId), ct),
+            await _unitOfWork.Repository<DailySalesEntry>().AnyAsync(e => e.DishSizeId != null && sizeIds.Contains(e.DishSizeId.Value), ct),
             "Bu ürün", "gün sonu satışlarında");
 
         await RemoveSizesAsync(sizes, ct);

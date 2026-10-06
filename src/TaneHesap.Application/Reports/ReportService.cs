@@ -94,16 +94,18 @@ public class ReportService : IReportService
             .GroupBy(r => r.DishSizeId)
             .ToDictionary(g => g.Key, g => g.Sum(r => r.Quantity * unitPrices.GetValueOrDefault(r.IngredientId)));
 
+        // Eşleşen satırlar ürün boyuna, eşleşmeyen platform ürünleri dosyadaki adına göre toplanır (maliyet bilinmez: 0).
         return salesEntries
-            .GroupBy(e => e.DishSizeId)
+            .GroupBy(e => e.DishSizeId is Guid id ? id.ToString() : $"ext:{e.ProductName}")
             .Select(g =>
             {
-                var size = sizes.GetValueOrDefault(g.Key);
+                var first = g.First();
+                var size = first.DishSizeId is Guid id ? sizes.GetValueOrDefault(id) : null;
                 var quantity = g.Sum(e => e.Quantity);
                 var revenue = g.Sum(e => e.TotalAmount);
-                var cost = quantity * unitCostBySize.GetValueOrDefault(g.Key);
-                var dishName = size is null ? "-" : dishNames.GetValueOrDefault(size.DishId, "-");
-                return new DishSalesTotalDto(g.Key, dishName, size?.Name ?? "-", quantity, revenue, cost, revenue - cost);
+                var cost = first.DishSizeId is Guid sizeId ? quantity * unitCostBySize.GetValueOrDefault(sizeId) : 0m;
+                var dishName = size is null ? (first.ProductName ?? "-") : dishNames.GetValueOrDefault(size.DishId, "-");
+                return new DishSalesTotalDto(first.DishSizeId, dishName, size?.Name ?? "—", quantity, revenue, cost, revenue - cost);
             })
             .OrderByDescending(d => d.Quantity)
             .ToList();
