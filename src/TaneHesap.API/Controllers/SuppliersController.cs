@@ -55,8 +55,8 @@ public class SuppliersController : ControllerBase
     public async Task<ActionResult<List<SupplierPurchaseDto>>> GetPurchases(Guid supplierId, CancellationToken ct)
         => Ok(await _supplierService.GetPurchasesAsync(BusinessId, supplierId, ct));
 
+    /// <summary>Çalışan da malzeme alışı girebilir (stok artar; şimdi ödenen kısım onun girdiği gider olur). Ödeme/silme ADMIN'dedir.</summary>
     [HttpPost("{supplierId:guid}/purchases")]
-    [Authorize(Roles = "Admin")]
     public async Task<ActionResult<SupplierPurchaseDto>> AddPurchase(Guid supplierId, [FromBody] CreateSupplierPurchaseRequest request, CancellationToken ct)
     {
         var created = await _supplierService.AddPurchaseAsync(BusinessId, supplierId, request, UserId, ct);
