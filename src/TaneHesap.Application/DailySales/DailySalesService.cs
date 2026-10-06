@@ -34,15 +34,9 @@ public class DailySalesService : IDailySalesService
             var row = request.Rows[i];
             var rowNo = i + 1;
 
-            if (row.DishSizeId is Guid sizeId && !dishSizesById.ContainsKey(sizeId))
+            if (!dishSizesById.ContainsKey(row.DishSizeId))
             {
-                errors.Add($"Satır {rowNo}: tabak boyu bulunamadı ({sizeId}).");
-                continue;
-            }
-
-            if (row.DishSizeId is null && string.IsNullOrWhiteSpace(row.ProductName))
-            {
-                errors.Add($"Satır {rowNo}: ürün seçilmemiş ve ürün adı boş.");
+                errors.Add($"Satır {rowNo}: ürün sistemde tanımlı değil ({row.ProductName ?? row.DishSizeId.ToString()}). Önce Ürünler'e ekleyin.");
                 continue;
             }
 
@@ -216,14 +210,12 @@ public class DailySalesService : IDailySalesService
             .OrderBy(e => e.SaleTime)
             .Select(e =>
             {
-                DishSize? size = null;
-                if (e.DishSizeId is Guid sizeId) dishSizesById.TryGetValue(sizeId, out size);
-                // Eşleşmeyen platform ürünü: dosyadaki adıyla, boy "—" (stoktan düşüm yok).
+                dishSizesById.TryGetValue(e.DishSizeId, out var size);
                 var dishName = size is not null && dishesById.TryGetValue(size.DishId, out var dish) ? dish.Name : (e.ProductName ?? "-");
                 string? platformName = e.PlatformId.HasValue && platformsById.TryGetValue(e.PlatformId.Value, out var platform) ? platform.Name : null;
 
                 return new DailySalesEntryDto(
-                    e.Id, e.SaleDate, e.SaleTime, e.DishSizeId, dishName, size?.Name ?? "—",
+                    e.Id, e.SaleDate, e.SaleTime, e.DishSizeId, dishName, size?.Name ?? "-",
                     e.Quantity, e.TotalAmount, e.PaymentMethod, e.Channel, e.PlatformId, platformName, e.DiscountAmount, e.ExternalOrderNumber);
             })
             .ToList();

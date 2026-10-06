@@ -128,7 +128,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, IdentityR
         builder.Entity<MonthlyReport>().HasIndex(x => new { x.BusinessId, x.Year, x.Month }).IsUnique();
         builder.Entity<DailyIncomeVerification>().HasIndex(x => new { x.BusinessId, x.VerificationDate }).IsUnique();
 
-        // Eşleşmeyen platform ürünü satırında ürün boyu yoktur; sipariş numarasıyla sorgulanabilir.
+        // Dosyadaki ürün adı ve platform sipariş numarası (izlenebilirlik).
         builder.Entity<DailySalesEntry>().Property(x => x.ProductName).HasMaxLength(300);
         builder.Entity<DailySalesEntry>().Property(x => x.ExternalOrderNumber).HasMaxLength(100);
         builder.Entity<DailySalesEntry>().HasIndex(x => new { x.BusinessId, x.ExternalOrderNumber });

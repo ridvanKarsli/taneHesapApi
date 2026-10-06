@@ -9,8 +9,7 @@ public record ExpenseCategoryTotalDto(ExpenseCategory Category, decimal Amount);
 /// malzemelerin GÜNCEL birim fiyatıyla hesaplanır — geçmiş fiyat geçmişi tutulmadığı için tahminidir.
 /// </summary>
 public record DishSalesTotalDto(
-    /// <summary>Eşleşmeyen platform ürünlerinde null (satır dosyadaki adıyla, maliyetsiz gösterilir).</summary>
-    Guid? DishSizeId,
+    Guid DishSizeId,
     string DishName,
     string SizeName,
     int Quantity,

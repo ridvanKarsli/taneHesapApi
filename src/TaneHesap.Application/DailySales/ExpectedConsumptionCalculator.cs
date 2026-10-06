@@ -28,7 +28,7 @@ public class ExpectedConsumptionCalculator : IExpectedConsumptionCalculator
 
         foreach (var entry in entries)
         {
-            if (entry.DishSizeId is not Guid sizeId || !recipeItemsByDishSize.TryGetValue(sizeId, out var items))
+            if (!recipeItemsByDishSize.TryGetValue(entry.DishSizeId, out var items))
             {
                 continue;
             }
