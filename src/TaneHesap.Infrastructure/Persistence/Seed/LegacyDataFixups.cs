@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using TaneHesap.Application.Platforms;
 using TaneHesap.Domain.Enums;
 
 namespace TaneHesap.Infrastructure.Persistence.Seed;
@@ -9,6 +10,7 @@ namespace TaneHesap.Infrastructure.Persistence.Seed;
 /// - "Sabit gider" kategorisi (eski enum değeri 1) kaldırıldı — mevcut gider türleri "Diğer"e taşınır (bölüm 3.2).
 /// - "Kart Komisyonu" adı "POS Komisyonu" oldu — mevcut otomatik gider türü ve açıklamalar yeniden adlandırılır.
 /// - Düzenli gider ödemeleri "Düzenli Gider" türü yerine düzenli giderin adını taşır; eski ödemeler taşınır.
+/// - Yemeksepeti ve Trendyol Go platformları her işletmede hazır gelir; eksik olan işletmelere eklenir.
 /// </summary>
 public static class LegacyDataFixups
 {
@@ -64,5 +66,26 @@ public static class LegacyDataFixups
             JOIN "ExpenseTypes" AS old ON old."Name" = 'Düzenli Gider'
             WHERE e."SourceReferenceType" = 'RecurringExpensePayment' AND e."SourceReferenceId" = p."Id" AND e."ExpenseTypeId" = old."Id"
             """, ct);
+
+        await EnsureDefaultPlatformsAsync(dbContext, ct);
+    }
+
+    /// <summary>
+    /// Yemeksepeti ve Trendyol Go her işletmede hazır gelir (yeni işletmede BusinessService açar). Var olan işletmelerde
+    /// adında ilgili anahtar kelime geçen bir platform yoksa %0 komisyonla eklenir; süper admin oranı sonra girer.
+    /// </summary>
+    private static async Task EnsureDefaultPlatformsAsync(ApplicationDbContext dbContext, CancellationToken ct)
+    {
+        foreach (var definition in DefaultPlatforms.All)
+        {
+            var keywordPattern = string.Join("|", definition.Keywords.Select(k => k.Replace(" ", @"\s*")));
+            await dbContext.Database.ExecuteSqlInterpolatedAsync(
+                $"""
+                INSERT INTO "Platforms" ("Id", "BusinessId", "Name", "CommissionPercentage", "IsActive", "CreatedAtUtc")
+                SELECT gen_random_uuid(), b."Id", {definition.Name}, 0, TRUE, NOW()
+                FROM "Businesses" AS b
+                WHERE NOT EXISTS (SELECT 1 FROM "Platforms" AS p WHERE p."BusinessId" = b."Id" AND p."Name" ~* {keywordPattern})
+                """, ct);
+        }
     }
 }

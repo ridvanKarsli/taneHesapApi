@@ -1,5 +1,6 @@
 using TaneHesap.Application.Common.Exceptions;
 using TaneHesap.Application.Common.Interfaces;
+using TaneHesap.Application.Platforms;
 using TaneHesap.Domain.Entities;
 
 namespace TaneHesap.Application.Businesses;
@@ -42,6 +43,14 @@ public class BusinessService : IBusinessService
         };
 
         await _unitOfWork.Repository<Business>().AddAsync(business, ct);
+
+        // Paket servis platformları (Yemeksepeti, Trendyol Go) her işletmede hazır gelir; komisyon oranı sonra girilir.
+        var platforms = _unitOfWork.Repository<Platform>();
+        foreach (var platform in DefaultPlatforms.CreateFor(business.Id, createdByUserId))
+        {
+            await platforms.AddAsync(platform, ct);
+        }
+
         await _unitOfWork.SaveChangesAsync(ct);
 
         return ToDto(business);
