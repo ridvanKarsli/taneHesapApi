@@ -41,7 +41,7 @@ public class ActivityService : IActivityService
 
     private static readonly string[] AmountKeys = { "Amount", "TotalAmount", "PaidAmount", "ActualRevenue", "QuantityChange", "Hours", "Limit", "SalePrice", "HourlyWage" };
     private static readonly string[] DateKeys = { "ExpenseDate", "SaleDate", "EntryDate", "PurchaseDate", "PaymentDate", "WorkDate", "TransactionDate", "PeriodStartDate", "VerificationDate", "StartDate" };
-    private static readonly string[] TextKeys = { "Description", "Note", "Name" };
+    private static readonly string[] TextKeys = { "Description", "Note", "Name", "ProductName" };
     /// <summary>Değişiklik özetinde gösterilen alanlar ve işletme sahibinin anlayacağı adları; listede olmayan (teknik) alanlar gizlenir.</summary>
     private static readonly Dictionary<string, string> FieldLabels = new()
     {
@@ -56,7 +56,7 @@ public class ActivityService : IActivityService
         ["CurrentUnitPrice"] = "Birim fiyat", ["MinimumStockThreshold"] = "Minimum stok", ["Unit"] = "Birim",
         ["IntervalCount"] = "Periyot (kaç)", ["StartDate"] = "Başlangıç", ["ContactInfo"] = "İletişim", ["Address"] = "Adres",
         ["Account"] = "Hesap", ["ExpenseTypeId"] = "Gider türü", ["PaymentCardId"] = "Kart", ["EmployeeUserId"] = "Çalışan",
-        ["IngredientId"] = "Malzeme", ["DishSizeId"] = "Ürün",
+        ["IngredientId"] = "Malzeme", ["DishSizeId"] = "Ürün", ["ProductName"] = "Ürün adı",
     };
 
     /// <summary>
