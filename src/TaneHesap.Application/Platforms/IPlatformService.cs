@@ -15,6 +15,12 @@ public interface IPlatformService
 
     Task<PlatformDto> UpdateAsync(Guid businessId, Guid id, UpdatePlatformRequest request, Guid updatedByUserId, CancellationToken ct = default);
 
+    /// <summary>
+    /// Yalnızca komisyon yüzdesini değiştirir — platformu yönetemeyen işletme sahibi (ADMIN) de yapabilir;
+    /// sonraki yüklemelerin komisyon gideri yeni orana göre hesaplanır (geçmiş kayıtlar değişmez).
+    /// </summary>
+    Task<PlatformDto> UpdateCommissionAsync(Guid businessId, Guid id, decimal commissionPercentage, Guid updatedByUserId, CancellationToken ct = default);
+
     /// <summary>Hiç satışı olmayan platformu siler.</summary>
     Task DeleteAsync(Guid businessId, Guid id, CancellationToken ct = default);
 }

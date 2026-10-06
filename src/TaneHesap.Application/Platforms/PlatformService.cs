@@ -25,6 +25,7 @@ public class PlatformService : IPlatformService
 
     public async Task<PlatformDto> CreateAsync(Guid businessId, CreatePlatformRequest request, Guid createdByUserId, CancellationToken ct = default)
     {
+        EnsureValidCommission(request.CommissionPercentage);
         var entity = new Platform
         {
             BusinessId = businessId,
@@ -42,12 +43,29 @@ public class PlatformService : IPlatformService
 
     public async Task<PlatformDto> UpdateAsync(Guid businessId, Guid id, UpdatePlatformRequest request, Guid updatedByUserId, CancellationToken ct = default)
     {
+        EnsureValidCommission(request.CommissionPercentage);
         var repo = _unitOfWork.Repository<Platform>();
         var entity = await GetTenantScopedAsync(businessId, id, ct);
 
         entity.Name = request.Name;
         entity.CommissionPercentage = request.CommissionPercentage;
         entity.IsActive = request.IsActive;
+        entity.UpdatedByUserId = updatedByUserId;
+        entity.UpdatedAtUtc = DateTime.UtcNow;
+
+        repo.Update(entity);
+        await _unitOfWork.SaveChangesAsync(ct);
+
+        return ToDto(entity);
+    }
+
+    public async Task<PlatformDto> UpdateCommissionAsync(Guid businessId, Guid id, decimal commissionPercentage, Guid updatedByUserId, CancellationToken ct = default)
+    {
+        EnsureValidCommission(commissionPercentage);
+        var repo = _unitOfWork.Repository<Platform>();
+        var entity = await GetTenantScopedAsync(businessId, id, ct);
+
+        entity.CommissionPercentage = commissionPercentage;
         entity.UpdatedByUserId = updatedByUserId;
         entity.UpdatedAtUtc = DateTime.UtcNow;
 
@@ -76,6 +94,14 @@ public class PlatformService : IPlatformService
         }
 
         return entity;
+    }
+
+    private static void EnsureValidCommission(decimal percentage)
+    {
+        if (percentage < 0 || percentage > 100)
+        {
+            throw new ValidationAppException("Komisyon yüzdesi 0 ile 100 arasında olmalı.");
+        }
     }
 
     private static PlatformDto ToDto(Platform p) => new(p.Id, p.Name, p.CommissionPercentage, p.IsActive);

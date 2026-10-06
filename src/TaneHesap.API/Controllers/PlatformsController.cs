@@ -7,8 +7,9 @@ using TaneHesap.Application.Platforms;
 namespace TaneHesap.API.Controllers;
 
 /// <summary>
-/// Paket servis platformları (Yemeksepeti, Uber vb.) ve komisyon yüzdeleri. İşletme sahibi ve çalışan yalnızca
-/// görüntüler (satış Excel'i eşleştirmesi için); ekleme/düzenleme/silme işletmeye girmiş süper admindedir.
+/// Paket servis platformları (Yemeksepeti, Trendyol Go) ve komisyon yüzdeleri. İşletme sahibi ve çalışan görüntüler
+/// (satış Excel'i eşleştirmesi için); ekleme/ad değiştirme/silme işletmeye girmiş süper admindedir, komisyon oranını
+/// işletme sahibi (ADMIN) de günceller.
 /// bkz. Proje Raporu bölüm 3.4.
 /// </summary>
 [ApiController]
@@ -48,6 +49,12 @@ public class PlatformsController : ControllerBase
     [Authorize(Policy = AuthPolicies.ActingSuperAdmin)]
     public async Task<ActionResult<PlatformDto>> Update(Guid id, [FromBody] UpdatePlatformRequest request, CancellationToken ct)
         => Ok(await _platformService.UpdateAsync(BusinessId, id, request, UserId, ct));
+
+    /// <summary>Komisyon oranı işletme sahibince de değiştirilebilir (Gün Sonu kartındaki "Komisyonu güncelle").</summary>
+    [HttpPut("{id:guid}/commission")]
+    [Authorize(Roles = "Admin")]
+    public async Task<ActionResult<PlatformDto>> UpdateCommission(Guid id, [FromBody] UpdatePlatformCommissionRequest request, CancellationToken ct)
+        => Ok(await _platformService.UpdateCommissionAsync(BusinessId, id, request.CommissionPercentage, UserId, ct));
 
     [HttpDelete("{id:guid}")]
     [Authorize(Policy = AuthPolicies.ActingSuperAdmin)]
